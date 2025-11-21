@@ -1,0 +1,37 @@
+# Конфигурация приложения
+app:
+  name: "mqtt-http-bridge"
+  version: "0.0.1"
+
+# Настройки логгера
+log:
+  level: "debug" # debug, info, warn, error
+  # output: "stdout" # stdout, stderr, или путь к файлу
+
+# Настройки MQTT клиента(ТЕСТОВЫЕ, не продакшен!!!)
+mqtt:
+  broker: "tcp://test.mosquitto.org:1883"
+  client_id: "BackEnd_Server"
+  #username: "user"
+  #password: "pass"
+  new_divice_topic: "new/device"
+  qos: 2
+  clean_session: true
+  keep_alive: 60 #seconds
+  connect_timeout: 30
+
+
+# Настройки http сервера (ТЕСТОВЫЕ, не продакшен!!!)
+http:
+  host: "localhost"
+  port: 8080
+
+
+# Настройки базы данных (ТЕСТОВЫЕ, не продакшен!!!)
+database:
+  host: "postgres"
+  port: 5432
+  name: "subscriptions"
+  user: "postgres"
+  password: "password"
+
