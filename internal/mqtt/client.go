@@ -9,14 +9,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type MQTTClient struct {
-	client   mqtt.Client
-	config   config.Config
-	logger   zap.SugaredLogger
-	handlers handlers.Handlers
+type Handlers interface {
 }
 
-func NewMQTTClient(config config.Config, logger zap.SugaredLogger, handlers handlers.Handlers) *MQTTClient {
+type MQTTClient struct {
+	client   mqtt.Client
+	config   *config.Config
+	logger   *zap.SugaredLogger
+	handlers Handlers
+}
+
+func NewMQTTClient(config *config.Config, logger *zap.SugaredLogger, handlers *handlers.Handlers) *MQTTClient {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(config.MQTT.Broker)
 	opts.SetClientID(config.MQTT.ClientID)

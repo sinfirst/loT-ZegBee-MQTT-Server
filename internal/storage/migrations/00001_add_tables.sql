@@ -1,7 +1,15 @@
 -- +goose Up
 -- Создание таблицы устройств
+
+CREATE TABLE users(
+    id SERIAL PRIMARY KEY,
+    telegram_id INT NOT NULL,
+    username TEXT NOT NULL,
+)
+
 CREATE TABLE devices (
     id SERIAL PRIMARY KEY,
+    user_id INT,
     device_id VARCHAR(255) NOT NULL UNIQUE,
     device_type VARCHAR(100) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'active',

@@ -9,8 +9,11 @@ import (
 	"syscall"
 
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/config"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/http"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/mqtt"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/router"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/storage"
 )
 
@@ -22,34 +25,28 @@ func main() {
 	if err != nil {
 		log.Panic("can't init config", err)
 	}
-
-	err = storage.InitMigrations(conf.DataBase.DataBaseDSN)
-	if err != nil {
-		log.Panic("can't init migrations", err)
-	}
-
 	logger := logging.NewLogger(conf.Log.Level)
-	db := storage.NewPGDB(conf, logger)
-	http := http.NewHTTPServer(logger)
-	router := router.NewRouter(a)
+	logger.Info("Init config successfull")
 
-	server := &http.Server{Addr: conf.ServerAddress, Handler: router}
-	if !conf.HTTPSEnable {
-		go func() {
-			logger.Infow("Starting http server", "addr", conf.ServerAddress)
-			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Fatalw("create server error: ", err)
-			}
-		}()
-	} else {
-		go func() {
-			logger.Infow("Starting https server")
-			err := http.ListenAndServeTLS(":8443", certFile, keyFile, nil)
-			if err != nil {
-				logger.Fatal("error while start server: ", err)
-			}
-		}()
+	err = storage.InitMigrations(conf)
+	if err != nil {
+		logger.Fatal("can't init migrations", err)
 	}
+	logger.Info("Init config successfull")
+
+	db := storage.NewPGDB(conf, logger)
+	handlers := handlers.NewHandlersStruct(logger, db)
+	mqtt := mqtt.NewMQTTClient(conf, logger, handlers)
+	http := http.NewHTTPServer(logger)
+	router := router.NewRouter(http)
+
+	server := &http.Server{Addr: conf.HTTP.Address, Handler: router}
+	go func() {
+		logger.Infow("Starting http server", "addr", conf.HTTP.Address)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatalw("create server error: ", err)
+		}
+	}()
 
 	<-ctx.Done()
 	if err := server.Shutdown(context.Background()); err != nil {

@@ -30,6 +30,8 @@ type RegisterNewDevices struct {
 	SomeMeta string   `json:"some_meta,omitempty"`
 }
 type Device struct {
-	DeviceId string `json:"device_id"`
-	Meta     string `json:"meta,omitempty"`
+	DeviceId   string `json:"device_id"`
+	DeviceType string `json:"device_type"`
+	Status     string `json:"status"`
+	Meta       string `json:"meta,omitempty"`
 }

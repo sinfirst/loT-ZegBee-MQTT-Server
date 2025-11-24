@@ -6,11 +6,11 @@ import (
 )
 
 type Handlers struct {
-	logger  zap.SugaredLogger
-	storage storage.PGDB
+	logger  *zap.SugaredLogger
+	storage *storage.PGDB
 }
 
-func NewHandlersStruct(logger zap.SugaredLogger, storage storage.PGDB) *Handlers {
+func NewHandlersStruct(logger *zap.SugaredLogger, storage *storage.PGDB) *Handlers {
 	return &Handlers{logger: logger, storage: storage}
 }
 
