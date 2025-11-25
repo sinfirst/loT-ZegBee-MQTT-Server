@@ -29,9 +29,22 @@ type RegisterNewDevices struct {
 	Devices  []Device `json:"devices"`
 	SomeMeta string   `json:"some_meta,omitempty"`
 }
+
 type Device struct {
-	DeviceId   string `json:"device_id"`
-	DeviceType string `json:"device_type"`
-	Status     string `json:"status"`
-	Meta       string `json:"meta,omitempty"`
+	DeviceID  string `json:"device_id"`
+	LastEvent string `json:"dlast_event"`
+	LastSeen  string `json:"last_seen"`
+	Battery   int    `json:"battery_percentage"`
+	Status    string `json:"status"`
+}
+
+type Event struct {
+	DeviceID   string  `json:"device_id"`
+	Event      string  `json:"event"`
+	Confidence float32 `json:"confidence"`
+	TimeStamp  string  `json:"timestamp"`
+}
+
+type DeviceInfo struct {
+	Device
 }

@@ -9,9 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type Handlers interface {
-}
-
 type MQTTClient struct {
 	client   mqtt.Client
 	config   *config.Config

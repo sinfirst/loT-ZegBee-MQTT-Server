@@ -6,23 +6,20 @@ import (
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
 )
 
-func NewRouter(s *handlers.Handlers) *chi.Mux {
+func NewRouter(h *handlers.Handlers) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(logging.WithLogging)
 
-	// API routes
 	r.Route("/api", func(r chi.Router) {
-		// User endpoints
 		r.Route("/user", func(r chi.Router) {
-			r.Post("/register", s.RegisterUserHandler)
+			r.Post("/register", h.RegisterUser)
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/devices", s.getUserDevicesHandler)
-				r.Get("/events", s.GetUserEventsHandler)
+				r.Get("/devices", h.GetUserDevices)
+				r.Get("/events", h.GetHistoryEvents)
 			})
 		})
 
-		// Device endpoints
 		r.Route("/device", func(r chi.Router) {
 			r.Post("/register", registerDeviceHandler)
 			r.Route("/{id}", func(r chi.Router) {
@@ -32,10 +29,6 @@ func NewRouter(s *handlers.Handlers) *chi.Mux {
 			})
 		})
 
-		// Hub endpoints
-		r.Post("/hub/event", hubEventHandler)
-
-		// System endpoints
 		r.Get("/health", healthHandler)
 	})
 
