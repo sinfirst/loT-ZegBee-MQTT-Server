@@ -8,7 +8,7 @@ import (
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
-func (h *Handlers) RegisterUser(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	type registerUserRequest struct {
 		TelegramID int64  `json:"telegram_id"`
 		Username   string `json:"username"`
@@ -51,7 +51,7 @@ func (h *Handlers) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handlers) GetUserDevices(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
 		Status  string          `json:"status"`
 		Devices []models.Device `json:"devices"`
@@ -60,7 +60,7 @@ func (h *Handlers) GetUserDevices(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 
 	if h.storage.UserExistsByUserID(userID) == false {
-		h.responseWithError(w, "User doesn't exist", http.StatusNotFound)
+		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}
 
@@ -96,27 +96,27 @@ func (h *Handlers) GetUserDevices(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handlers) GetHistoryEvents(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
 		Status string         `json:"status"`
 		Events []models.Event `json:"devices"`
 	}
 
-	userId := chi.URLParam(r, "id")
+	userID := chi.URLParam(r, "id")
 
 	hours := r.URL.Query().Get("hours")
 	if hours == "" {
 		hours = "24"
 	}
 
-	if h.storage.UserExistsByUserID(userId) == false {
-		h.responseWithError(w, "User doesn't exist", http.StatusNotFound)
+	if h.storage.UserExistsByUserID(userID) == false {
+		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	events, err := h.storage.GetEventsByUserID(userId)
+	events, err := h.storage.GetEventsByUserID(userID)
 	if err != nil {
-		h.responseWithError(w, "Failed found devices", http.StatusInternalServerError)
+		h.responseWithError(w, "Failed found events", http.StatusInternalServerError)
 		return
 	}
 

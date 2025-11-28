@@ -5,9 +5,13 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/config"
-	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers"
 	"go.uber.org/zap"
 )
+
+type Handlers interface {
+	NewDeviceMessageHandler([]byte) []string
+	EventHandler([]byte)
+}
 
 type MQTTClient struct {
 	client   mqtt.Client
@@ -16,7 +20,7 @@ type MQTTClient struct {
 	handlers Handlers
 }
 
-func NewMQTTClient(config *config.Config, logger *zap.SugaredLogger, handlers *handlers.Handlers) *MQTTClient {
+func NewMQTTClient(config *config.Config, logger *zap.SugaredLogger, handlers Handlers) *MQTTClient {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(config.MQTT.Broker)
 	opts.SetClientID(config.MQTT.ClientID)
@@ -61,10 +65,10 @@ func (c *MQTTClient) messageHandler(client mqtt.Client, msg mqtt.Message) {
 	)
 
 	if msg.Topic() == c.config.MQTT.New_divice_topic {
-		topics := c.handlers.NewDiviceMessageHandler(msg.Payload())
+		topics := c.handlers.NewDeviceMessageHandler(msg.Payload())
 		c.Subscribe(topics)
 	} else {
-		c.handlers.MessageHandler(msg.Payload())
+		c.handlers.EventHandler(msg.Payload())
 	}
 
 	msg.Ack()

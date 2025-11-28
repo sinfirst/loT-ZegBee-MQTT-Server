@@ -74,7 +74,7 @@ func (p *PGDB) AddDevice(ctx context.Context, device models.Device) error {
 		VALUES ($1, $2, $3)
 		RETURNING id
 	`
-	err := p.db.QueryRow(ctx, query, device.DeviceId, device.DeviceType, device.Status).Scan(&id)
+	err := p.db.QueryRow(ctx, query, device.DeviceID, device.DeviceType, device.SensorStatus).Scan(&id)
 	if err != nil {
 		p.logger.Errorw("Problem with create in db: ", err)
 		return err

@@ -1,16 +1,16 @@
 package models
 
-type NewDataFromDevice struct {
-	DeviceID        string       `json:"device_id"`
-	Event           string       `json:"event"`
-	EventConfidence float32      `json:"event_confidence"`
-	Acceleration    Acceleration `json:"acceleration"`
-	Angle           Angle        `json:"angle"`
-	Battery         Battery      `json:"battery"`
-	SignalStrength  int          `json:"signal_strength"`
-	TimeStamp       string       `json:"timestamp"`
-	Version         string       `json:"firmware_version"`
-}
+// type NewDataFromDevice struct {
+// 	DeviceID        string       `json:"device_id"`
+// 	Event           string       `json:"event"`
+// 	EventConfidence float32      `json:"event_confidence"`
+// 	Acceleration    Acceleration `json:"acceleration"`
+// 	Angle           Angle        `json:"angle"`
+// 	Battery         Battery      `json:"battery"`
+// 	SignalStrength  int          `json:"signal_strength"`
+// 	TimeStamp       string       `json:"timestamp"`
+// 	Version         string       `json:"firmware_version"`
+// }
 type Acceleration struct {
 	X float32 `json:"x"`
 	Y float32 `json:"y"`
@@ -31,11 +31,14 @@ type RegisterNewDevices struct {
 }
 
 type Device struct {
-	DeviceID  string `json:"device_id"`
-	LastEvent string `json:"dlast_event"`
-	LastSeen  string `json:"last_seen"`
-	Battery   int    `json:"battery_percentage"`
-	Status    string `json:"status"`
+	DeviceID         string  `json:"device_id"`
+	DeviceType       string  `json:"device_type"`
+	LastEvent        string  `json:"dlast_event"`
+	Battery          Battery `json:"battery"`
+	SignalStrength   int     `json:"signal_strength"`
+	OrientationState string  `json:"orientation_state"`
+	SensorStatus     string  `json:"sensor_status"`
+	LastSeen         string  `json:"last_seen"`
 }
 
 type Event struct {
@@ -43,8 +46,4 @@ type Event struct {
 	Event      string  `json:"event"`
 	Confidence float32 `json:"confidence"`
 	TimeStamp  string  `json:"timestamp"`
-}
-
-type DeviceInfo struct {
-	Device
 }

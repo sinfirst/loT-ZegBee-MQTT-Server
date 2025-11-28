@@ -2,34 +2,33 @@ package router
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers"
+	handlers "github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers/server"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
 )
 
-func NewRouter(h *handlers.Handlers) *chi.Mux {
+func NewRouter(h *handlers.HTTPServerHandlers) *chi.Mux {
 	r := chi.NewRouter()
-
 	r.Use(logging.WithLogging)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/user", func(r chi.Router) {
-			r.Post("/register", h.RegisterUser)
+			r.Post("/register", h.RegisterUserHandler)
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/devices", h.GetUserDevices)
-				r.Get("/events", h.GetHistoryEvents)
+				r.Get("/devices", h.UserDevicesHandler)
+				r.Get("/events", h.HistoryEventsHandler)
 			})
 		})
 
 		r.Route("/device", func(r chi.Router) {
-			r.Post("/register", registerDeviceHandler)
+			r.Post("/register", h.RegisterDeviceHandler)
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", getDeviceHandler)
-				r.Delete("/", deleteDeviceHandler)
-				r.Get("/events", getDeviceEventsHandler)
+				r.Get("/", h.DeviceInfoHandler)
+				r.Delete("/", h.DeleteDeviceHandler)
+				r.Get("/events", h.DeviceHistoryHandler)
 			})
 		})
 
-		r.Get("/health", healthHandler)
+		r.Get("/health", h.HealthCheckHandler)
 	})
 
 	return r

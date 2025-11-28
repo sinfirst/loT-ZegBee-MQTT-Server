@@ -35,21 +35,20 @@ func main() {
 	logger.Info("Init config successfull")
 
 	db := storage.NewPGDB(conf, logger)
-	handlers := handlers.NewHandlersStruct(logger, db)
-	mqtt := mqtt.NewMQTTClient(conf, logger, handlers)
-	http := http.NewHTTPServer(logger)
-	router := router.NewRouter(http)
 
-	server := &http.Server{Addr: conf.HTTP.Address, Handler: router}
+	HTTPServerHandlers := handlers.NewHTTPServerHandlers(logger, db)
+	router := router.NewRouter(HTTPServerHandlers)
+	HTTPServer := &http.Server{Addr: conf.HTTP.Address, Handler: router}
 	go func() {
 		logger.Infow("Starting http server", "addr", conf.HTTP.Address)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := HTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalw("create server error: ", err)
 		}
 	}()
-
 	<-ctx.Done()
-	if err := server.Shutdown(context.Background()); err != nil {
+	if err := HTTPServer.Shutdown(context.Background()); err != nil {
 		logger.Errorw("Server shutdown error", err)
 	}
+
+	mqttClient := mqtt.NewMQTTClient(conf, logger, HTTPServerHandlers)
 }

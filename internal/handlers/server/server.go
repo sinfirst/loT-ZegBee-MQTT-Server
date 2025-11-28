@@ -8,20 +8,16 @@ import (
 	"go.uber.org/zap"
 )
 
-type Handlers struct {
+type HTTPServerHandlers struct {
 	logger  *zap.SugaredLogger
 	storage *storage.PGDB
 }
 
-func NewHandlersStruct(logger *zap.SugaredLogger, storage *storage.PGDB) *Handlers {
-	return &Handlers{logger: logger, storage: storage}
+func NewHTTPServerHandlers(logger *zap.SugaredLogger, storage *storage.PGDB) *HTTPServerHandlers {
+	return &HTTPServerHandlers{logger: logger, storage: storage}
 }
 
-func (h *Handlers) NewDiviceMessageHandler(msg []byte) []string {
-
-}
-
-func (h *Handlers) responseWithError(w http.ResponseWriter, message string, status int) {
+func (h *HTTPServerHandlers) responseWithError(w http.ResponseWriter, message string, status int) {
 	type statusError struct {
 		Status  string `json:"status"`
 		Message string `json:"message"`
