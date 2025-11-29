@@ -1,10 +1,11 @@
 -- +goose Up
--- Создание таблицы устройств
+-- Создание таблиц
 
 CREATE TABLE users(
     id SERIAL PRIMARY KEY,
     telegram_id INT NOT NULL,
     username TEXT NOT NULL,
+    hub_id TEXT
 )
 
 CREATE TABLE devices (
@@ -18,7 +19,6 @@ CREATE TABLE devices (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Создание таблицы событий
 CREATE TABLE events (
     id SERIAL PRIMARY KEY,
     device_id VARCHAR(255) NOT NULL,
@@ -29,7 +29,6 @@ CREATE TABLE events (
     FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE
 );
 
--- Создание таблицы уведомлений
 CREATE TABLE notifications (
     id SERIAL PRIMARY KEY,
     device_id VARCHAR(255) NOT NULL,
@@ -49,7 +48,24 @@ CREATE INDEX idx_notifications_sent_at ON notifications(sent_at);
 CREATE INDEX idx_devices_status ON devices(status);
 CREATE INDEX idx_devices_last_activity ON devices(last_activity);
 
+
+-- Триггер для автоматической генерации user_id
+CREATE OR REPLACE FUNCTION generate_user_code()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.user_code := 'user_' || NEW.id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_user_code
+    BEFORE INSERT ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_user_code();
+
 -- +goose Down
+DROP TRIGGER set_user_code ON users;
+DROP FUNCTION generate_user_code;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS devices;

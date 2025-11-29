@@ -1,35 +1,5 @@
 package models
 
-// type NewDataFromDevice struct {
-// 	DeviceID        string       `json:"device_id"`
-// 	Event           string       `json:"event"`
-// 	EventConfidence float32      `json:"event_confidence"`
-// 	Acceleration    Acceleration `json:"acceleration"`
-// 	Angle           Angle        `json:"angle"`
-// 	Battery         Battery      `json:"battery"`
-// 	SignalStrength  int          `json:"signal_strength"`
-// 	TimeStamp       string       `json:"timestamp"`
-// 	Version         string       `json:"firmware_version"`
-// }
-type Acceleration struct {
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
-	Z float32 `json:"z"`
-}
-type Angle struct {
-	Pitch float32 `json:"pitch"`
-	Roll  float32 `json:"roll"`
-}
-type Battery struct {
-	Voltage    float32 `json:"voltage"`
-	Percentage int     `json:"percentage"`
-}
-
-type RegisterNewDevices struct {
-	Devices  []Device `json:"devices"`
-	SomeMeta string   `json:"some_meta,omitempty"`
-}
-
 type Device struct {
 	DeviceID         string  `json:"device_id"`
 	DeviceType       string  `json:"device_type"`
@@ -42,8 +12,40 @@ type Device struct {
 }
 
 type Event struct {
-	DeviceID   string  `json:"device_id"`
-	Event      string  `json:"event"`
-	Confidence float32 `json:"confidence"`
-	TimeStamp  string  `json:"timestamp"`
+	HubID    string `json:"hub_id"`
+	DeviceID string `json:"device_id"`
+	Data     Data   `json:"data"`
+}
+
+type PushEvent struct {
+	UserID     string `json:"user_id"`
+	DeviceID   string `json:"device_id"`
+	Event      string `json:"event"`
+	Confidence string `json:"confidence"`
+	Timestamp  string `json:"timestamp"`
+}
+
+type Data struct {
+	Event           string       `json:"event"`
+	EventConfidence float32      `json:"event_confidence"`
+	Acceleration    Acceleration `json:"acceleration"`
+	Angle           Angle        `json:"angle"`
+	Battery         Battery      `json:"battery"`
+	SignalStrength  int          `json:"signal_strength"`
+	Temperature     float32      `json:"temperature"`
+	TimeStamp       string       `json:"timestamp"`
+}
+
+type Acceleration struct {
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+	Z float32 `json:"z"`
+}
+type Angle struct {
+	Pitch float32 `json:"pitch"`
+	Roll  float32 `json:"roll"`
+}
+type Battery struct {
+	Voltage    float32 `json:"voltage"`
+	Percentage int     `json:"percentage"`
 }
