@@ -2,6 +2,8 @@ package models
 
 type Device struct {
 	DeviceID         string  `json:"device_id"`
+	UserID           string  `json:"user_id"`
+	HubID            string  `json:"hub_id"`
 	DeviceType       string  `json:"device_type"`
 	LastEvent        string  `json:"dlast_event"`
 	Battery          Battery `json:"battery"`

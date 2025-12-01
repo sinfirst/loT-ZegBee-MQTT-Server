@@ -5,25 +5,36 @@ CREATE TABLE users(
     id SERIAL PRIMARY KEY,
     telegram_id INT NOT NULL,
     username TEXT NOT NULL,
-    hub_id TEXT
+    hub_id VARCHAR(20),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 )
 
 CREATE TABLE devices (
-    id SERIAL PRIMARY KEY,
-    user_id INT,
-    device_id VARCHAR(255) NOT NULL UNIQUE,
+    device_id TEXT PRIMARY KEY,
+    user_id INT NOT NULL,
+    hub_id INT NOT NULL,
     device_type VARCHAR(100) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'active',
-    last_activity TIMESTAMP WITH TIME ZONE,
+    last_event VARCHAR(20),
+    battery JSONB,
+    signal_strength INT,
+    orientation_state VARCHAR(20) NOT NULL,
+    sensor_status VARCHAR(50) NOT NULL,
+    last_seen TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE events (
     id SERIAL PRIMARY KEY,
-    device_id VARCHAR(255) NOT NULL,
+    hub_id INT NOT NULL,
+    device_id INT NOT NULL,
     event_type VARCHAR(100) NOT NULL,
-    event_data JSONB,
+    event_confidence DECIMAL(3,2) NOT NULL,
+    signal_strength INT,
+    temperature DECIMAL(4,1),
+    acceleration JSONB,
+    angle JSONB,
+    battery JSONB,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE
@@ -34,38 +45,17 @@ CREATE TABLE notifications (
     device_id VARCHAR(255) NOT NULL,
     notification_type VARCHAR(100) NOT NULL,
     message TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'sent',
+    sent_status VARCHAR(50) NOT NULL DEFAULT 'sent',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE
 );
 
--- Создание индексов для оптимизации запросов
-CREATE INDEX idx_events_device_id ON events(device_id);
-CREATE INDEX idx_events_timestamp ON events(timestamp);
-CREATE INDEX idx_events_type ON events(event_type);
-CREATE INDEX idx_notifications_device_id ON notifications(device_id);
-CREATE INDEX idx_notifications_sent_at ON notifications(sent_at);
-CREATE INDEX idx_devices_status ON devices(status);
-CREATE INDEX idx_devices_last_activity ON devices(last_activity);
 
+-- Индексы
 
--- Триггер для автоматической генерации user_id
-CREATE OR REPLACE FUNCTION generate_user_code()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.user_code := 'user_' || NEW.id;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER set_user_code
-    BEFORE INSERT ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION generate_user_code();
 
 -- +goose Down
-DROP TRIGGER set_user_code ON users;
-DROP FUNCTION generate_user_code;
+DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS devices;

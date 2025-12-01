@@ -10,14 +10,14 @@ import (
 
 func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *http.Request) {
 	type deviceRegisterRequest struct {
-		UserID   string `json:"user_id"`
-		DeviceID string `json:"device_id"`
+		UserID string `json:"user_id"`
+		HubID  string `json:"hub_id"`
 	}
 
 	type statusSuccess struct {
-		Status   string `json:"status"`
-		DeviceID string `json:"device_id"`
-		Message  string `json:"message"`
+		Status    string `json:"status"`
+		DevicesID string `json:"devices_id"`
+		Message   string `json:"message"`
 	}
 
 	var req deviceRegisterRequest
@@ -26,22 +26,22 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if h.storage.UserExistsByUserID(req.UserID) == false {
+	exist, err := h.storage.UserExistsByUserID(r.Context(), req.UserID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	if h.storage.DeviceExistByDeviceID(req.DeviceID) == false {
-		h.responseWithError(w, "Device not found", http.StatusNotFound)
+	if h.storage.ConnectExistByHubID(req.HubID) {
+		h.responseWithError(w, "Devices already registered", http.StatusConflict)
 		return
 	}
 
-	if h.storage.ConnectExistByDeviceID(req.DeviceID) {
-		h.responseWithError(w, "Device already registered", http.StatusConflict)
-		return
-	}
-
-	err := h.storage.CreateConnect(req.UserID, req.DeviceID)
+	err := h.storage.CreateConnect(req.UserID, req.HubID)
 	if err != nil {
 		h.responseWithError(w, "Failed to create connect", http.StatusInternalServerError)
 		return

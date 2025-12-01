@@ -10,7 +10,7 @@ import (
 
 func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	type registerUserRequest struct {
-		TelegramID int64  `json:"telegram_id"`
+		TelegramID int    `json:"telegram_id"`
 		Username   string `json:"username"`
 	}
 
@@ -26,12 +26,17 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if h.storage.UserExistsByTGID(req.TelegramID) {
+	exist, err := h.storage.UserExistsByTGID(r.Context(), req.TelegramID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist {
 		h.responseWithError(w, "User alredy exist", http.StatusConflict)
 		return
 	}
 
-	userID, err := h.storage.CreateUser(user)
+	userID, err := h.storage.CreateUser(r.Context(), req.TelegramID, req.Username)
 	if err != nil {
 		h.responseWithError(w, "Failed to create user", http.StatusInternalServerError)
 		return
@@ -42,7 +47,7 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:  "ok",
-		UserID:  userID,
+		UserID:  string(userID),
 		Message: "Device registered",
 	})
 	if err != nil {
@@ -59,12 +64,17 @@ func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.R
 
 	userID := chi.URLParam(r, "id")
 
-	if h.storage.UserExistsByUserID(userID) == false {
+	exist, err := h.storage.UserExistsByUserID(r.Context(), userID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	devices, err := h.storage.GetDevicesByUserID(userID)
+	devices, err := h.storage.GetDevicesByUserID(r.Context(), userID)
 	if err != nil {
 		h.responseWithError(w, "Failed found devices", http.StatusInternalServerError)
 		return
@@ -109,7 +119,12 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		hours = "24"
 	}
 
-	if h.storage.UserExistsByUserID(userID) == false {
+	exist, err := h.storage.UserExistsByUserID(r.Context(), userID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}

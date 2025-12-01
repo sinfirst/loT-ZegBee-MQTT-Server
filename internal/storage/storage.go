@@ -67,13 +67,17 @@ func databaseExists(db *pgxpool.Pool, dbName string) (bool, error) {
 	return true, nil
 }
 
-func (p *PGDB) AddDevice(ctx context.Context, device models.Device) error {
+func (p *PGDB) AddDevices(ctx context.Context, devices []models.Device, hubID string) error {
 	var id int
 	query := `
 		INSERT INTO devices (device_id, device_type, status)
 		VALUES ($1, $2, $3)
 		RETURNING id
 	`
+
+	for _, device := range devices {
+
+	}
 	err := p.db.QueryRow(ctx, query, device.DeviceID, device.DeviceType, device.SensorStatus).Scan(&id)
 	if err != nil {
 		p.logger.Errorw("Problem with create in db: ", err)
@@ -81,6 +85,78 @@ func (p *PGDB) AddDevice(ctx context.Context, device models.Device) error {
 	}
 
 	return nil
+}
+
+func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (int, error) {
+	var id int
+	query := `
+		INSERT INTO users (telegram_id, username)
+		VALUES ($1, $2)
+		RETURNING id
+	`
+
+	err := p.db.QueryRow(ctx, query, tgID, username).Scan(&id)
+	if err != nil {
+		p.logger.Errorw("Problem with create in db: ", err)
+		return 0, err
+	}
+
+	return id, err
+}
+
+func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.Device, error) {
+	var devices []models.Device
+
+	query := `SELECT device_id, hub_id, device_type, last_event, battery, signal_strength, orientation_state, sensor_status, last_seen FROM devices WHERE userID = $1`
+	rows, err := p.db.Query(ctx, query, userID)
+
+	if err != nil {
+		p.logger.Errorw("Problem with create list devices from db: ", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var device models.Device
+
+		err := rows.Scan(&device.DeviceID, &device.HubID, &device.DeviceType, &device.LastEvent, &device.Battery, &device.SignalStrength, &device.OrientationState, &device.SensorStatus, &device.LastSeen)
+		if err != nil {
+			p.logger.Errorw("Problem with create list devices from db: ", err)
+			return nil, err
+		}
+
+		devices = append(devices, device)
+	}
+
+	return devices, nil
+}
+
+func (p *PGDB) UserExistsByTGID(ctx context.Context, userID int) (bool, error) {
+	var exists bool
+	err := p.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM users WHERE telegram_id = $1
+		)
+	`, userID).Scan(&exists)
+	if err != nil {
+		p.logger.Errorw("Problem with check user exist by tg id: ", err)
+		return false, err
+	}
+	return exists, err
+}
+
+func (p *PGDB) UserExistsByUserID(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := p.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM users WHERE id = $1
+		)
+	`, userID).Scan(&exists)
+	if err != nil {
+		p.logger.Errorw("Problem check user exist by user id: ", err)
+		return false, err
+	}
+	return exists, err
 }
 
 func InitMigrations(conf *config.Config) error {
