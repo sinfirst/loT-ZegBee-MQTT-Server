@@ -67,61 +67,58 @@ func databaseExists(db *pgxpool.Pool, dbName string) (bool, error) {
 	return true, nil
 }
 
-func (p *PGD)AddDevices(, devices []Device) ([]string, error) {
-    if len(devices) == 0 {
-        return []string{}, nil
-    }
+func (p *PGDB) AddDevices(ctx context.Context, devices []models.Device) ([]string, error) {
+	deviceIDs := make([]string, 0, len(devices))
 
-    deviceIDs := make([]string, 0, len(devices))
-
-    // SQL запрос для вставки данных
-    query := `
+	query := `
         INSERT INTO devices (
             device_id, user_id, hub_id, device_type, 
             last_event, battery_type, signal_strength, 
             orientation_state, sensor_status, last_seen
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (device_id) DO UPDATE SET
-            user_id = EXCLUDED.user_id,
-            hub_id = EXCLUDED.hub_id,
-            device_type = EXCLUDED.device_type,
-            last_event = EXCLUDED.last_event,
-            battery_type = EXCLUDED.battery_type,
-            signal_strength = EXCLUDED.signal_strength,
-            orientation_state = EXCLUDED.orientation_state,
-            sensor_status = EXCLUDED.sensor_status,
-            last_seen = EXCLUDED.last_seen,
-            updated_at = CURRENT_TIMESTAMP
     `
 
-    // Проходим по всем устройствам и добавляем их
-    for _, device := range devices {
-        _, err := db.Exec(query,
-            device.DeviceID,
-            device.UserID,
-            device.HubID,
-            device.DeviceType,
-            device.LastEvent,
-            device.Battery.BatteryType,
-            device.SignalStrength,
-            device.OrientationState,
-            device.SensorStatus,
-            device.LastSeen,
-        )
-        
-        if err != nil {
-            return nil, fmt.Errorf("ошибка при добавлении устройства %s: %w", device.DeviceID, err)
-        }
-        
-        // Добавляем ID устройства в результат
-        deviceIDs = append(deviceIDs, device.DeviceID)
-    }
+	for _, device := range devices {
+		_, err := p.db.Exec(ctx, query,
+			device.DeviceID,
+			device.UserID,
+			device.HubID,
+			device.DeviceType,
+			device.LastEvent,
+			device.Battery,
+			device.SignalStrength,
+			device.OrientationState,
+			device.SensorStatus,
+			device.LastSeen,
+		)
 
-    return deviceIDs, nil
+		if err != nil {
+			p.logger.Error("Can't add devices", err)
+			return nil, err
+		}
+		deviceIDs = append(deviceIDs, device.DeviceID)
+	}
+
+	return deviceIDs, nil
 }
 
-func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (int, error) {
-	var id int
+func (p *PGDB) StorageEvent(ctx context.Context, event models.Event) (string, error) {
+	var id string
+	query := `
+		INSERT INTO events (hub_id, device_id, event_type, event_confidence, signal_strength, temperature, acceleration, angle, battery, timestamp)
+		VALUES VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING device_id
+	`
+	err := p.db.QueryRow(ctx, query, event.HubID, event.DeviceID, event.Data.Event, event.Data.EventConfidence, event.Data.SignalStrength, event.Data.Temperature, event.Data.Acceleration, event.Data.Angle, event.Data.Battery, event.Data.TimeStamp).Scan(&id)
+	if err != nil {
+		p.logger.Error("Can't storage event", err)
+		return "", err
+	}
+	return id, nil
+}
+
+func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (string, error) {
+	var id string
 	query := `
 		INSERT INTO users (telegram_id, username)
 		VALUES ($1, $2)
@@ -131,7 +128,7 @@ func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (int, 
 	err := p.db.QueryRow(ctx, query, tgID, username).Scan(&id)
 	if err != nil {
 		p.logger.Errorw("Problem with create in db: ", err)
-		return 0, err
+		return "", err
 	}
 
 	return id, err
@@ -167,29 +164,18 @@ func (p *PGDB) CreateConnect(ctx context.Context, userID, hubID string) ([]strin
 
 func (p *PGDB) GetDeviceInfo(ctx context.Context, deviceID string) (models.Device, error) {
 	var device models.Device
-	
+
 	query := `SELECT device_id, user_id, hub_id, device_type, last_event, battery, signal_strength, orientation_state, sensor_status, last_seen FROM devices WHERE device_id = $1`
-	err := p.db.QueryRow(ctx, query, deviceID).Scan(&device.DeviceID, &device.UserID &device.HubID, &device.DeviceType, &device.LastEvent, &device.Battery, &device.SignalStrength, &device.OrientationState, &device.SensorStatus, &device.LastSeen))
+	err := p.db.QueryRow(ctx, query, deviceID).Scan(&device.DeviceID, &device.UserID, &device.HubID, &device.DeviceType, &device.LastEvent, &device.Battery, &device.SignalStrength, &device.OrientationState, &device.SensorStatus, &device.LastSeen)
 
 	if err != nil {
 		p.logger.Errorw("Problem get device info from db: ", err)
-		return nil, err
+		return models.Device{}, err
 	}
 
 	return device, nil
-	
+
 }
-
-func (p *PGDB) DeleteDevice(ctx context.Context, deviceID string) error {
-    result, err := p.db.Exec("DELETE FROM devices WHERE device_id = $1", deviceID)
-    if err != nil {
-        p.logger.Errorw("Problem with delete device from db: ", err)
-		return err
-    }
-    
-}
-
-
 
 func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.Device, error) {
 	var devices []models.Device
@@ -218,69 +204,33 @@ func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.
 	return devices, nil
 }
 
+func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]models.Event, error) {
+	// Заглушка
+	return []models.Event{}, nil
+}
 
-func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID string, hours string) ([]Event, error) {
-    startTime := time.Now().Add(-time.Duration(hours) * time.Hour)
-    
-    query := `
-        SELECT 
-            id, 
-            hub_id, 
-            device_id, 
-            event_type, 
-            event_confidence,
-            signal_strength,
-            temperature,
-            acceleration,
-            angle,
-            battery,
-            timestamp,
-        FROM events 
-        WHERE device_id = $1 
-        AND timestamp >= $2
-        ORDER BY timestamp DESC
-    `
-    
-    rows, err := db.Query(query, deviceID, startTime)
-    if err != nil {
-		p.logger.Errorf("failed to query events: %w", err)
-		return nil, err
-    }
-    defer rows.Close()
-    
-    var events []Event
-    
-    for rows.Next() {
-        var event Event
-        
-        err := rows.Scan(
-            &event.ID,
-            &event.HubID,
-            &event.DeviceID,
-            &event.EventType,
-            &event.EventConfidence,
-            &event.SignalStrength,
-            &event.Temperature,
-            &accelerationData,
-            &angleData,
-            &batteryData,
-            &event.Timestamp,
-            &event.CreatedAt,
-        )
-        
-        if err != nil {
-			p.logger.Errorf("failed to scan event row: %w", err)
-			return nil, err
-        }
-        
-        event.Acceleration = accelerationData
-        event.Angle = angleData
-        event.Battery = batteryData
-        
-        events = append(events, event)
-    }
-    
-    return events, nil
+func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) ([]models.Event, error) {
+	// Заглушка
+	return []models.Event{}, nil
+}
+
+func (p *PGDB) DeleteDevice(ctx context.Context, deviceID string) error {
+	//Загулшка
+	return nil
+}
+
+func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string, error) {
+	var id string
+	query := `
+		SELECT FROM devices user_id WHERE device_id = &1
+	`
+	err := p.db.QueryRow(ctx, query, deviceID).Scan(&id)
+	if err != nil {
+		p.logger.Error("can't get user by device id", err)
+		return "", err
+	}
+	return id, nil
+
 }
 
 func (p *PGDB) ConnectExistByHubID(ctx context.Context, hubID string) (bool, error) {

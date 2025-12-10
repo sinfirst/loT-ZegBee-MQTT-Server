@@ -9,8 +9,7 @@ import (
 	"syscall"
 
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/config"
-	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers"
-	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/http"
+	handlers "github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers/server"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/mqtt"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/router"
@@ -51,4 +50,8 @@ func main() {
 	}
 
 	mqttClient := mqtt.NewMQTTClient(conf, logger, HTTPServerHandlers)
+	err = mqttClient.Connect()
+	if err := mqttClient.Connect(); err != nil {
+		logger.Fatal("can't init mqtt connect", err)
+	}
 }

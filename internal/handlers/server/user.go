@@ -47,7 +47,7 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:  "ok",
-		UserID:  string(userID),
+		UserID:  userID,
 		Message: "Device registered",
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	events, err := h.storage.GetEventsByUserID(userID)
+	events, err := h.storage.GetEventsByUserID(r.Context(), userID, hours)
 	if err != nil {
 		h.responseWithError(w, "Failed found events", http.StatusInternalServerError)
 		return

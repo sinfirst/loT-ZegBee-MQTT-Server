@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
 func (c *ClientHandlers) PushEvent(event models.Event, userID string) error {
 	type botNotification struct {
-		UserID     string  `json:"user_id"`
-		DeviceID   string  `json:"device_id"`
-		Event      string  `json:"event"`
-		Confidence float32 `json:"confidence"`
-		Timestamp  string  `json:"timestamp"`
+		UserID     string    `json:"user_id"`
+		DeviceID   string    `json:"device_id"`
+		Event      string    `json:"event"`
+		Confidence float32   `json:"confidence"`
+		Timestamp  time.Time `json:"timestamp"`
 	}
 
 	type botResponse struct {

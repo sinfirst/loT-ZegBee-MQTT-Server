@@ -38,7 +38,9 @@ func (c *MQTTClient) Connect() error {
 		return token.Error()
 	}
 
-	c.Subscribe([]string{c.config.MQTT.New_divice_topic})
+	if err := c.Subscribe([]string{c.config.MQTT.New_divice_topic}); err != nil {
+		return err
+	}
 
 	return nil
 }

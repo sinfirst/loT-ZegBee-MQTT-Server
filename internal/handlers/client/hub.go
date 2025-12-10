@@ -9,7 +9,6 @@ import (
 
 func (c *ClientHandlers) NewDeviceMessageHandler(msg []byte) []string {
 	type newDeivices struct {
-		HubID   string          `json:"hub_id"`
 		Devices []models.Device `json:"devices"`
 	}
 
@@ -19,7 +18,12 @@ func (c *ClientHandlers) NewDeviceMessageHandler(msg []byte) []string {
 		return nil
 	}
 
-	devicesID := c.storage.AddDevices(context.Background(), devices.Devices, devices.HubID)
+	devicesID, err := c.storage.AddDevices(context.Background(), devices.Devices)
+
+	if err != nil {
+		c.logger.Error("Can't add devices", err)
+		return nil
+	}
 
 	return devicesID
 
@@ -32,13 +36,19 @@ func (c *ClientHandlers) EventHandler(msg []byte) {
 		return
 	}
 
-	userID, err := c.storage.StorageEvent(event)
+	deviceID, err := c.storage.StorageEvent(context.Background(), event)
 	if err != nil {
 		c.logger.Error("Can't storage in bd", err)
+		return
 	}
 
 	//обработчик принятия решения
 	if check := c.handler(event); check {
+		userID, err := c.storage.GetUserIDByDeviceID(context.Background(), deviceID)
+		if err != nil {
+			c.logger.Error("Can't storage in bd", err)
+			return
+		}
 		c.PushEvent(event, userID)
 	}
 
