@@ -15,9 +15,9 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 	}
 
 	type statusSuccess struct {
-		Status    string `json:"status"`
-		DevicesID string `json:"devices_id"`
-		Message   string `json:"message"`
+		Status    string   `json:"status"`
+		DevicesID []string `json:"devices_id"`
+		Message   string   `json:"message"`
 	}
 
 	var req deviceRegisterRequest
@@ -36,12 +36,17 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if h.storage.ConnectExistByHubID(req.HubID) {
+	exist, err = h.storage.ConnectExistByHubID(r.Context(), req.HubID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist {
 		h.responseWithError(w, "Devices already registered", http.StatusConflict)
 		return
 	}
 
-	err := h.storage.CreateConnect(req.UserID, req.HubID)
+	devicesID, err := h.storage.CreateConnect(r.Context(), req.UserID, req.HubID)
 	if err != nil {
 		h.responseWithError(w, "Failed to create connect", http.StatusInternalServerError)
 		return
@@ -51,9 +56,9 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusCreated)
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
-		Status:   "ok",
-		DeviceID: req.DeviceID,
-		Message:  "Device registered",
+		Status:    "ok",
+		DevicesID: devicesID,
+		Message:   "Device registered",
 	})
 	if err != nil {
 		h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
@@ -66,14 +71,19 @@ func (h *HTTPServerHandlers) DeviceInfoHandler(w http.ResponseWriter, r *http.Re
 		Status string        `json:"status"`
 		Device models.Device `json:"device"`
 	}
-	deviceId := chi.URLParam(r, "id")
+	deviceID := chi.URLParam(r, "id")
 
-	if h.storage.DeviceExistByDeviceID(deviceID) == false {
+	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
-	device, err := h.storage.GetDeviceInfo(deviceId)
+	device, err := h.storage.GetDeviceInfo(r.Context(), deviceID)
 	if err != nil {
 		h.responseWithError(w, "Failed to get info", http.StatusInternalServerError)
 		return
@@ -105,12 +115,17 @@ func (h *HTTPServerHandlers) DeviceHistoryHandler(w http.ResponseWriter, r *http
 		hours = "24"
 	}
 
-	if h.storage.DeviceExistByDeviceID(deviceID) == false {
+	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
-	events, err := h.storage.GetEventsByDeviceID(userID)
+	events, err := h.storage.GetEventsByDeviceID(r.Context(), deviceID, hours)
 	if err != nil {
 		h.responseWithError(w, "Failed found events", http.StatusInternalServerError)
 		return
@@ -150,12 +165,17 @@ func (h *HTTPServerHandlers) DeleteDeviceHandler(w http.ResponseWriter, r *http.
 
 	deviceID := chi.URLParam(r, "id")
 
-	if h.storage.DeviceExistByDeviceID(deviceID) == false {
+	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
+	if err != nil {
+		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
+		return
+	}
+	if exist == false {
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
-	err = h.storage.DeleteDeviceByDeviceID(deviceID)
+	err = h.storage.DeleteDevice(r.Context(), deviceID)
 	if err != nil {
 		h.responseWithError(w, "Failed to delete device", http.StatusInternalServerError)
 		return
@@ -164,7 +184,7 @@ func (h *HTTPServerHandlers) DeleteDeviceHandler(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	err := json.NewEncoder(w).Encode(statusSuccess{
+	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:  "ok",
 		Message: "Device removed",
 	})

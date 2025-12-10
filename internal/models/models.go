@@ -1,30 +1,32 @@
 package models
 
+import "time"
+
 type Device struct {
-	DeviceID         string  `json:"device_id"`
-	UserID           string  `json:"user_id"`
-	HubID            string  `json:"hub_id"`
-	DeviceType       string  `json:"device_type"`
-	LastEvent        string  `json:"dlast_event"`
-	Battery          Battery `json:"battery"`
-	SignalStrength   int     `json:"signal_strength"`
-	OrientationState string  `json:"orientation_state"`
-	SensorStatus     string  `json:"sensor_status"`
-	LastSeen         string  `json:"last_seen"`
+	DeviceID         string    `json:"device_id"`
+	UserID           string    `json:"user_id"`
+	HubID            string    `json:"hub_id"`
+	DeviceType       string    `json:"device_type"`
+	LastEvent        string    `json:"dlast_event"`
+	Battery          Battery   `json:"battery"`
+	SignalStrength   int       `json:"signal_strength"`
+	OrientationState string    `json:"orientation_state"`
+	SensorStatus     string    `json:"sensor_status"`
+	LastSeen         time.Time `json:"last_seen"`
+}
+
+type PushEvent struct {
+	UserID     string    `json:"user_id"`
+	DeviceID   string    `json:"device_id"`
+	Event      string    `json:"event"`
+	Confidence string    `json:"confidence"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 type Event struct {
 	HubID    string `json:"hub_id"`
 	DeviceID string `json:"device_id"`
 	Data     Data   `json:"data"`
-}
-
-type PushEvent struct {
-	UserID     string `json:"user_id"`
-	DeviceID   string `json:"device_id"`
-	Event      string `json:"event"`
-	Confidence string `json:"confidence"`
-	Timestamp  string `json:"timestamp"`
 }
 
 type Data struct {
@@ -35,7 +37,7 @@ type Data struct {
 	Battery         Battery      `json:"battery"`
 	SignalStrength  int          `json:"signal_strength"`
 	Temperature     float32      `json:"temperature"`
-	TimeStamp       string       `json:"timestamp"`
+	TimeStamp       time.Time    `json:"timestamp"`
 }
 
 type Acceleration struct {

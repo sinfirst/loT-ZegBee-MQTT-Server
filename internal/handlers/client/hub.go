@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
@@ -18,7 +19,7 @@ func (c *ClientHandlers) NewDeviceMessageHandler(msg []byte) []string {
 		return nil
 	}
 
-	devicesID := c.storage.AddDevices(devices.Devices, devices.HubID)
+	devicesID := c.storage.AddDevices(context.Background(), devices.Devices, devices.HubID)
 
 	return devicesID
 

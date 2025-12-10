@@ -1,6 +1,25 @@
 -- +goose Up
 -- Создание таблиц
 
+-- Создаем тип для Acceleration
+CREATE TYPE acceleration_type AS (
+    x FLOAT,
+    y FLOAT,
+    z FLOAT
+);
+
+-- Создаем тип для Angle
+CREATE TYPE angle_type AS (
+    pitch FLOAT,
+    roll FLOAT
+);
+
+-- Создаем тип для Battery
+CREATE TYPE battery_type AS (
+    voltage FLOAT,
+    percentage INT
+);
+
 CREATE TABLE users(
     id SERIAL PRIMARY KEY,
     telegram_id INT NOT NULL,
@@ -15,7 +34,7 @@ CREATE TABLE devices (
     hub_id INT NOT NULL,
     device_type VARCHAR(100) NOT NULL,
     last_event VARCHAR(20),
-    battery JSONB,
+    battery battery_type,
     signal_strength INT,
     orientation_state VARCHAR(20) NOT NULL,
     sensor_status VARCHAR(50) NOT NULL,
@@ -32,9 +51,9 @@ CREATE TABLE events (
     event_confidence DECIMAL(3,2) NOT NULL,
     signal_strength INT,
     temperature DECIMAL(4,1),
-    acceleration JSONB,
-    angle JSONB,
-    battery JSONB,
+    acceleration acceleration_type,
+    angle angle_type,
+    battery battery_type,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE
