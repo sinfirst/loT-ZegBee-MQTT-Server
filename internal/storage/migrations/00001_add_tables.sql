@@ -24,20 +24,20 @@ CREATE TABLE users(
     id SERIAL PRIMARY KEY,
     telegram_id INT NOT NULL,
     username TEXT NOT NULL,
-    hub_id VARCHAR(20),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-)
+    hub_id TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE devices (
     device_id TEXT PRIMARY KEY,
     user_id INT NOT NULL,
-    hub_id INT NOT NULL,
-    device_type VARCHAR(100) NOT NULL,
-    last_event VARCHAR(20),
+    hub_id TEXT NOT NULL,
+    device_type TEXT NOT NULL,
+    last_event TEXT,
     battery battery_type,
     signal_strength INT,
-    orientation_state VARCHAR(20) NOT NULL,
-    sensor_status VARCHAR(50) NOT NULL,
+    orientation_state TEXT NOT NULL,
+    sensor_status TEXT NOT NULL,
     last_seen TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -45,8 +45,8 @@ CREATE TABLE devices (
 
 CREATE TABLE events (
     id SERIAL PRIMARY KEY,
-    hub_id INT NOT NULL,
-    device_id INT NOT NULL,
+    hub_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
     event_type VARCHAR(100) NOT NULL,
     event_confidence DECIMAL(3,2) NOT NULL,
     signal_strength INT,

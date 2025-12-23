@@ -1,4 +1,4 @@
-package handlers
+package client
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func (c *ClientHandlers) EventHandler(msg []byte) {
 			c.logger.Error("Can't storage in bd", err)
 			return
 		}
-		c.PushEvent(event, userID)
+		c.pushEvent(event, userID)
 	}
 
 }

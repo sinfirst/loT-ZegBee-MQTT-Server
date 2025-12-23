@@ -29,9 +29,9 @@ http:
 
 # Настройки базы данных (ТЕСТОВЫЕ, не продакшен!!!)
 database:
-  host: "postgres"
+  host: "localhost"
   port: 5432
-  name: "subscriptions"
-  user: "postgres"
-  password: "password"
+  name: "lotdb"
+  user: "admin"
+  password: "admin"
 

@@ -19,7 +19,7 @@ type PGDB struct {
 }
 
 func NewPGDB(conf *config.Config, logger *zap.SugaredLogger) *PGDB {
-	db, err := pgxpool.New(context.Background(), conf.DataBase.DataBaseDSN)
+	db, err := pgxpool.New(context.Background(), conf.DataBase.DataBaseDSN+"/postgres")
 
 	if err != nil {
 		logger.Errorw("Problem with connecting to db: ", err)
@@ -35,6 +35,7 @@ func NewPGDB(conf *config.Config, logger *zap.SugaredLogger) *PGDB {
 
 	exists, err := databaseExists(db, conf.DataBase.Name)
 	if err != nil {
+		logger.Errorf("failed to check database existence: %w", err)
 		return nil
 	}
 
@@ -55,19 +56,27 @@ func NewPGDB(conf *config.Config, logger *zap.SugaredLogger) *PGDB {
 }
 
 func databaseExists(db *pgxpool.Pool, dbName string) (bool, error) {
-	query := `SELECT 1 FROM pg_database WHERE datname = $1`
-	var exists int
+	query := `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)`
+
+	var exists bool
 	err := db.QueryRow(context.Background(), query, dbName).Scan(&exists)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
 		return false, err
 	}
-	return true, nil
+
+	return exists, nil
+
 }
 
 func (p *PGDB) AddDevices(ctx context.Context, devices []models.Device) ([]string, error) {
+
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		p.logger.Errorw("Problem with create transaction: ", err)
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
 	deviceIDs := make([]string, 0, len(devices))
 
 	query := `
@@ -79,7 +88,7 @@ func (p *PGDB) AddDevices(ctx context.Context, devices []models.Device) ([]strin
     `
 
 	for _, device := range devices {
-		_, err := p.db.Exec(ctx, query,
+		_, err := tx.Exec(ctx, query,
 			device.DeviceID,
 			device.UserID,
 			device.HubID,
@@ -99,6 +108,11 @@ func (p *PGDB) AddDevices(ctx context.Context, devices []models.Device) ([]strin
 		deviceIDs = append(deviceIDs, device.DeviceID)
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		p.logger.Errorw("Problem with commit transaction: ", err)
+		return nil, err
+	}
+
 	return deviceIDs, nil
 }
 
@@ -106,7 +120,7 @@ func (p *PGDB) StorageEvent(ctx context.Context, event models.Event) (string, er
 	var id string
 	query := `
 		INSERT INTO events (hub_id, device_id, event_type, event_confidence, signal_strength, temperature, acceleration, angle, battery, timestamp)
-		VALUES VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING device_id
 	`
 	err := p.db.QueryRow(ctx, query, event.HubID, event.DeviceID, event.Data.Event, event.Data.EventConfidence, event.Data.SignalStrength, event.Data.Temperature, event.Data.Acceleration, event.Data.Angle, event.Data.Battery, event.Data.TimeStamp).Scan(&id)
@@ -137,7 +151,14 @@ func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (strin
 func (p *PGDB) CreateConnect(ctx context.Context, userID, hubID string) ([]string, error) {
 	var deviceIDs []string
 
-	rows, err := p.db.Query(ctx, `
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		p.logger.Errorw("Problem with create transaction: ", err)
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
         UPDATE devices 
         SET user_id = $1
         WHERE hub_id = $2
@@ -157,6 +178,11 @@ func (p *PGDB) CreateConnect(ctx context.Context, userID, hubID string) ([]strin
 			return nil, err
 		}
 		deviceIDs = append(deviceIDs, deviceID)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		p.logger.Errorw("Problem with commit transaction: ", err)
+		return nil, err
 	}
 
 	return deviceIDs, nil
@@ -205,28 +231,155 @@ func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.
 }
 
 func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]models.Event, error) {
-	// Заглушка
-	return []models.Event{}, nil
+	query := `
+        SELECT 
+            e.hub_id,
+            e.device_id,
+            e.event_type,
+            e.event_confidence,
+            e.signal_strength,
+            e.temperature,
+            ROW(e.acceleration.x, e.acceleration.y, e.acceleration.z)::acceleration_type as acceleration,
+            ROW(e.angle.pitch, e.angle.roll)::angle_type as angle,
+            ROW(e.battery.voltage, e.battery.percentage)::battery_type as battery,
+            e.timestamp
+        FROM events e
+        INNER JOIN devices d ON e.device_id = d.device_id
+        WHERE d.user_id = $1 
+            AND e.timestamp >= NOW() - ($2 || ' hours')::INTERVAL
+        ORDER BY e.timestamp DESC
+    `
+
+	rows, err := p.db.Query(ctx, query, userID, hours)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events by user_id: %w", err)
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var event models.Event
+		var acceleration models.Acceleration
+		var angle models.Angle
+		var battery models.Battery
+
+		err := rows.Scan(
+			&event.HubID,
+			&event.DeviceID,
+			&event.Data.Event,
+			&event.Data.EventConfidence,
+			&event.Data.SignalStrength,
+			&event.Data.Temperature,
+			&acceleration,
+			&angle,
+			&battery,
+			&event.Data.TimeStamp,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event row: %w", err)
+		}
+
+		event.Data.Acceleration = acceleration
+		event.Data.Angle = angle
+		event.Data.Battery = battery
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return events, nil
 }
 
 func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) ([]models.Event, error) {
-	// Заглушка
-	return []models.Event{}, nil
+	query := `
+        SELECT 
+            e.hub_id,
+            e.device_id,
+            e.event_type,
+            e.event_confidence,
+            e.signal_strength,
+            e.temperature,
+            ROW(e.acceleration.x, e.acceleration.y, e.acceleration.z)::acceleration_type as acceleration,
+            ROW(e.angle.pitch, e.angle.roll)::angle_type as angle,
+            ROW(e.battery.voltage, e.battery.percentage)::battery_type as battery,
+            e.timestamp
+        FROM events e
+        WHERE e.device_id = $1 
+            AND e.timestamp >= NOW() - ($2 || ' hours')::INTERVAL
+        ORDER BY e.timestamp DESC
+    `
+
+	rows, err := p.db.Query(ctx, query, deviceID, hours)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events by device_id: %w", err)
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var event models.Event
+		var acceleration models.Acceleration
+		var angle models.Angle
+		var battery models.Battery
+
+		err := rows.Scan(
+			&event.HubID,
+			&event.DeviceID,
+			&event.Data.Event,
+			&event.Data.EventConfidence,
+			&event.Data.SignalStrength,
+			&event.Data.Temperature,
+			&acceleration,
+			&angle,
+			&battery,
+			&event.Data.TimeStamp,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event row: %w", err)
+		}
+
+		event.Data.Acceleration = acceleration
+		event.Data.Angle = angle
+		event.Data.Battery = battery
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return events, nil
 }
 
 func (p *PGDB) DeleteDevice(ctx context.Context, deviceID string) error {
-	//Загулшка
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		p.logger.Errorw("Problem with create transaction: ", err)
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `DELETE FROM devices WHERE device_id = $1`
+
+	if _, err := tx.Exec(ctx, query, deviceID); err != nil {
+		p.logger.Errorw("failed to delete device: %w", err)
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		p.logger.Errorw("Problem with commit transaction: ", err)
+		return err
+	}
 	return nil
 }
 
 func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string, error) {
 	var id string
-	query := `
-		SELECT FROM devices user_id WHERE device_id = &1
-	`
+	query := `SELECT user_id FROM devices WHERE device_id = $1`
 	err := p.db.QueryRow(ctx, query, deviceID).Scan(&id)
 	if err != nil {
-		p.logger.Error("can't get user by device id", err)
 		return "", err
 	}
 	return id, nil

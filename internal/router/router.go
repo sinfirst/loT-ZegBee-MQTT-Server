@@ -2,11 +2,11 @@ package router
 
 import (
 	"github.com/go-chi/chi/v5"
-	handlers "github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers/server"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers/server"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
 )
 
-func NewRouter(h *handlers.HTTPServerHandlers) *chi.Mux {
+func NewRouter(h *server.HTTPServerHandlers) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(logging.WithLogging)
 
