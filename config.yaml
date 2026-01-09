@@ -6,28 +6,24 @@ app:
 # Настройки логгера
 log:
   level: "debug" # debug, info, warn, error
-  # output: "stdout" # stdout, stderr, или путь к файлу
 
-# Настройки MQTT клиента(ТЕСТОВЫЕ, не продакшен!!!)
+# Настройки MQTT клиента(ТЕСТОВЫЕ)
 mqtt:
-  broker: "tcp://test.mosquitto.org:1883"
-  client_id: "BackEnd_Server"
-  #username: "user"
-  #password: "pass"
-  new_divice_topic: "new/device"
-  qos: 2
+  broker: "192.168.1.2:1883"
+  client_id: "zigbee-server"
+  new_divice_topic: "tele/+/+/SENSOR"
+  qos: 1
   clean_session: true
-  keep_alive: 60 #seconds
+  keep_alive: 60
   connect_timeout: 30
 
-
-# Настройки http сервера (ТЕСТОВЫЕ, не продакшен!!!)
+# Настройки http сервера (ТЕСТОВЫЕ)
 http:
   host: "localhost"
   port: 8080
 
 
-# Настройки базы данных (ТЕСТОВЫЕ, не продакшен!!!)
+# Настройки базы данных (ТЕСТОВЫЕ)
 database:
   host: "localhost"
   port: 5432

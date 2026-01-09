@@ -22,34 +22,71 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 
 	var req deviceRegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.responseWithError(w, "Bad request", http.StatusBadRequest)
+		h.responseWithError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == "" {
+		h.responseWithError(w, "UserID is required", http.StatusBadRequest)
+		return
+	}
+	if req.HubID == "" {
+		h.responseWithError(w, "HubID is required", http.StatusBadRequest)
 		return
 	}
 
 	exist, err := h.storage.UserExistsByUserID(r.Context(), req.UserID)
 	if err != nil {
-		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to check user existence", "error", err)
+		h.responseWithError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if exist == false {
+	if !exist {
 		h.responseWithError(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	exist, err = h.storage.ConnectExistByHubID(r.Context(), req.HubID)
+	hubConnected, err := h.storage.ConnectExistByHubID(r.Context(), req.HubID)
 	if err != nil {
-		h.responseWithError(w, "Failed to check user exist in DB", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to check hub connection", "error", err)
+		h.responseWithError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if exist {
-		h.responseWithError(w, "Devices already registered", http.StatusConflict)
+	if hubConnected {
+		h.responseWithError(w, "Hub already registered to another user", http.StatusConflict)
+		return
+	}
+
+	if err := h.mqttFunc.SubscribeToHub(req.HubID); err != nil {
+		h.logger.Errorw("Failed to subscribe to hub MQTT topics",
+			"hub_id", req.HubID,
+			"error", err,
+		)
+		h.responseWithError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	devicesID, err := h.storage.CreateConnect(r.Context(), req.UserID, req.HubID)
 	if err != nil {
-		h.responseWithError(w, "Failed to create connect", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to create connection", "error", err)
+
+		if unsubscribeErr := h.mqttFunc.UnsubscribeFromHub(req.HubID); unsubscribeErr != nil {
+			h.logger.Errorw("Failed to unsubscribe after DB error",
+				"hub_id", req.HubID,
+				"error", unsubscribeErr,
+			)
+		}
+
+		h.responseWithError(w, "Failed to register devices", http.StatusInternalServerError)
 		return
+	}
+
+	if len(devicesID) == 0 {
+		h.logger.Warnw("Hub registered but no devices found",
+			"hub_id", req.HubID,
+			"user_id", req.UserID,
+			"devices_from_hub", len(devicesID),
+		)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -58,11 +95,10 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:    "ok",
 		DevicesID: devicesID,
-		Message:   "Device registered",
+		Message:   "Devices registered successfully",
 	})
 	if err != nil {
-		h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
-		return
+		h.logger.Errorw("Failed to encode response", "error", err)
 	}
 }
 
@@ -71,45 +107,35 @@ func (h *HTTPServerHandlers) DeviceInfoHandler(w http.ResponseWriter, r *http.Re
 		Status string        `json:"status"`
 		Device models.Device `json:"device"`
 	}
+
 	deviceID := chi.URLParam(r, "id")
 
-	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
+	device, err := h.storage.GetDeviceInfo(r.Context(), deviceID)
 	if err != nil {
-		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
-		return
-	}
-	if exist == false {
+		h.logger.Errorw("Failed to get device info", "error", err)
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
-	device, err := h.storage.GetDeviceInfo(r.Context(), deviceID)
-	if err != nil {
-		h.responseWithError(w, "Failed to get info", http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status: "ok",
 		Device: device,
 	})
 	if err != nil {
-		h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
-		return
+		h.logger.Errorw("Failed to encode response", "error", err)
 	}
 }
 
 func (h *HTTPServerHandlers) DeviceHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
 		Status string         `json:"status"`
-		Events []models.Event `json:"devices"`
+		Events []models.Event `json:"events"`
 	}
 
 	deviceID := chi.URLParam(r, "id")
-
 	hours := r.URL.Query().Get("hours")
 	if hours == "" {
 		hours = "24"
@@ -117,31 +143,33 @@ func (h *HTTPServerHandlers) DeviceHistoryHandler(w http.ResponseWriter, r *http
 
 	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
 	if err != nil {
-		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to check device existence", "error", err)
+		h.responseWithError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if exist == false {
+	if !exist {
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
 	events, err := h.storage.GetEventsByDeviceID(r.Context(), deviceID, hours)
 	if err != nil {
-		h.responseWithError(w, "Failed found events", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to get device events", "error", err)
+		h.responseWithError(w, "Failed to get events", http.StatusInternalServerError)
 		return
 	}
 
-	if events == nil {
+	if len(events) == 0 {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNoContent)
-
+		w.WriteHeader(http.StatusOK)
 		err = json.NewEncoder(w).Encode(statusSuccess{
 			Status: "ok",
+			Events: []models.Event{},
 		})
 		if err != nil {
-			h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
-			return
+			h.logger.Errorw("Failed to encode response", "error", err)
 		}
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -152,8 +180,7 @@ func (h *HTTPServerHandlers) DeviceHistoryHandler(w http.ResponseWriter, r *http
 		Events: events,
 	})
 	if err != nil {
-		h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
-		return
+		h.logger.Errorw("Failed to encode response", "error", err)
 	}
 }
 
@@ -164,19 +191,20 @@ func (h *HTTPServerHandlers) DeleteDeviceHandler(w http.ResponseWriter, r *http.
 	}
 
 	deviceID := chi.URLParam(r, "id")
-
 	exist, err := h.storage.DeviceExistByDeviceID(r.Context(), deviceID)
 	if err != nil {
-		h.responseWithError(w, "Failed to check device exist in DB", http.StatusInternalServerError)
+		h.logger.Errorw("Failed to check device existence", "error", err)
+		h.responseWithError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if exist == false {
+	if !exist {
 		h.responseWithError(w, "Device not found", http.StatusNotFound)
 		return
 	}
 
 	err = h.storage.DeleteDevice(r.Context(), deviceID)
 	if err != nil {
+		h.logger.Errorw("Failed to delete device", "error", err)
 		h.responseWithError(w, "Failed to delete device", http.StatusInternalServerError)
 		return
 	}
@@ -186,10 +214,9 @@ func (h *HTTPServerHandlers) DeleteDeviceHandler(w http.ResponseWriter, r *http.
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:  "ok",
-		Message: "Device removed",
+		Message: "Device deleted successfully",
 	})
 	if err != nil {
-		h.responseWithError(w, "Failed to response answer", http.StatusInternalServerError)
-		return
+		h.logger.Errorw("Failed to encode response", "error", err)
 	}
 }
