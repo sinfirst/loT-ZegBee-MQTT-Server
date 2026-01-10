@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
@@ -108,8 +110,20 @@ func (h *HTTPServerHandlers) DeviceInfoHandler(w http.ResponseWriter, r *http.Re
 		Device models.Device `json:"device"`
 	}
 
-	deviceID := chi.URLParam(r, "id")
+	path := r.URL.Path
 
+	prefix := "/api/device/"
+	if !strings.HasPrefix(path, prefix) {
+		h.responseWithError(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	deviceID := strings.TrimPrefix(path, prefix)
+
+	deviceID = strings.TrimSuffix(deviceID, "/")
+
+	fmt.Println(r.URL.Query())
+	fmt.Println(deviceID)
 	device, err := h.storage.GetDeviceInfo(r.Context(), deviceID)
 	if err != nil {
 		h.logger.Errorw("Failed to get device info", "error", err)

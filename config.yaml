@@ -16,6 +16,7 @@ mqtt:
   clean_session: true
   keep_alive: 60
   connect_timeout: 30
+  zb_info_ticker: 60
 
 # Настройки http сервера (ТЕСТОВЫЕ)
 http:

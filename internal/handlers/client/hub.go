@@ -16,13 +16,11 @@ func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]interface
 		return c.ErrorHandler(hubID, "", "zbinfo_parse_error", errMsg)
 	}
 
-	// Собираем список всех устройств в сообщении
 	deviceIDs := make([]string, 0, len(zbInfoData))
 	for deviceID := range zbInfoData {
 		deviceIDs = append(deviceIDs, deviceID)
 	}
 
-	// Обновляем все устройства в одной транзакции
 	err := c.storage.UpdateDevicesFromZbInfo(context.Background(), hubID, zbInfoData)
 	if err != nil {
 		c.logger.Errorw("Failed to update devices from ZbInfo",
@@ -34,7 +32,6 @@ func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]interface
 			fmt.Sprintf("Failed to update %d devices: %v", len(zbInfoData), err))
 	}
 
-	// Автоматически привязываем новые устройства к существующему пользователю хаба
 	if len(deviceIDs) > 0 {
 		if err := c.storage.AutoAssignNewDevices(context.Background(), hubID, deviceIDs); err != nil {
 			c.logger.Warnw("Failed to auto-assign new devices",

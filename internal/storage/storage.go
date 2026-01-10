@@ -131,6 +131,7 @@ func (p *PGDB) UserExistsByUserID(ctx context.Context, userID string) (bool, err
 
 func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string, error) {
 	var userID sql.NullString
+	deviceID = "0x" + deviceID //КОСТЫЛЬ)
 	query := `SELECT user_id::text FROM devices WHERE device_id = $1`
 	err := p.db.QueryRow(ctx, query, deviceID).Scan(&userID)
 	if err != nil {
@@ -268,6 +269,7 @@ func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.
 }
 
 func (p *PGDB) GetDeviceInfo(ctx context.Context, deviceID string) (models.Device, error) {
+	fmt.Println(deviceID)
 	var device models.Device
 	query := `
 		SELECT 
@@ -447,22 +449,18 @@ func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventDa
 		return "", fmt.Errorf("invalid ZbReceived structure")
 	}
 
+	deviceID = "0x" + deviceID //КОСТЫЛЬ)
+
 	deviceData, ok := zbReceived[deviceID].(map[string]interface{})
 	if !ok {
 		return "", fmt.Errorf("device %s not found in ZbReceived", deviceID)
 	}
 
-	movement, _ := deviceData["Movement"].(float64)
 	linkQuality, _ := deviceData["LinkQuality"].(float64)
 
-	eventType := "unknown"
-	if movement == 1 {
-		eventType = "movement"
-	}
-
 	query := `
-		INSERT INTO events (hub_id, device_id, event_type, link_quality, raw_data)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO events (hub_id, device_id, link_quality)
+		VALUES ($1, $2, $3)
 		RETURNING id::text
 	`
 
@@ -470,9 +468,7 @@ func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventDa
 	err := p.db.QueryRow(ctx, query,
 		hubID,
 		deviceID,
-		eventType,
 		int(linkQuality),
-		fmt.Sprintf("%v", eventData),
 	).Scan(&eventID)
 
 	if err != nil {
@@ -699,51 +695,66 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 		return nil
 	}
 
-	tx, err := p.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var userID string
+	// 1. Получаем user_id для этого хаба
 	queryGetUser := `
-		SELECT user_id::text 
+		SELECT user_id 
 		FROM devices 
 		WHERE hub_id = $1 AND user_id IS NOT NULL 
 		LIMIT 1
 	`
 
-	err = tx.QueryRow(ctx, queryGetUser, hubID).Scan(&userID)
+	var userID sql.NullInt64
+	err := p.db.QueryRow(ctx, queryGetUser, hubID).Scan(&userID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
+			// Хаб еще не привязан к пользователю
+			p.logger.Debugw("Hub not assigned to any user, skipping auto-assign",
+				"hub_id", hubID,
+			)
 			return nil
 		}
+		p.logger.Errorw("Failed to get user_id for hub",
+			"hub_id", hubID,
+			"error", err,
+		)
 		return fmt.Errorf("get hub user: %w", err)
 	}
 
+	// Проверяем, что user_id валиден
+	if !userID.Valid || userID.Int64 == 0 {
+		p.logger.Debugw("Hub has no valid user_id assigned",
+			"hub_id", hubID,
+			"user_id", userID,
+		)
+		return nil
+	}
+
+	// 2. Привязываем все устройства одним запросом
 	queryAssign := `
 		UPDATE devices 
 		SET user_id = $1, updated_at = CURRENT_TIMESTAMP
 		WHERE hub_id = $2 
 			AND device_id = ANY($3) 
-			AND (user_id IS NULL OR user_id = '')
+			AND (user_id IS NULL OR user_id = 0)
 	`
 
-	result, err := tx.Exec(ctx, queryAssign, userID, hubID, deviceIDs)
+	result, err := p.db.Exec(ctx, queryAssign, userID.Int64, hubID, deviceIDs)
 	if err != nil {
+		p.logger.Errorw("Failed to assign devices to user",
+			"hub_id", hubID,
+			"user_id", userID.Int64,
+			"device_count", len(deviceIDs),
+			"error", err,
+		)
 		return fmt.Errorf("assign devices: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
 	if rowsAffected > 0 {
 		p.logger.Infow("Auto-assigned devices to user",
 			"hub_id", hubID,
-			"user_id", userID,
+			"user_id", userID.Int64,
 			"devices_assigned", rowsAffected,
 			"total_devices", len(deviceIDs),
 		)
@@ -751,6 +762,7 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 
 	return nil
 }
+
 func InitMigrations(conf *config.Config) error {
 	db, err := sql.Open("pgx", conf.DataBase.DataBaseDSN+"/"+conf.DataBase.Name)
 	if err != nil {

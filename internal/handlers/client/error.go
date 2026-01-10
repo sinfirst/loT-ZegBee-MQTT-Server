@@ -60,7 +60,7 @@ func (c *ClientHandlers) ErrorHandler(hubID, deviceID, errorType, message string
 		return err
 	}
 
-	req, err := http.NewRequest("POST", c.config.HTTP.Address+"/api/bot/error", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "http://"+c.config.HTTP.Address+"/api/bot/error", bytes.NewBuffer(jsonData))
 	if err != nil {
 		c.logger.Errorw("Failed to create error notification request", "error", err)
 		return err

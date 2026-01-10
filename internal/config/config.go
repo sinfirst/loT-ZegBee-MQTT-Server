@@ -39,6 +39,7 @@ type MQTTConfig struct {
 	CleanSession     bool   `yaml:"clean_session"`
 	KeepAlive        int    `yaml:"keep_alive"`
 	ConnectTimeout   int    `yaml:"connect_timeout"`
+	ZbInfoTiker      int    `yaml:"zb_info_ticker"`
 }
 
 type HTTPConfig struct {

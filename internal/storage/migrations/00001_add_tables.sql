@@ -20,9 +20,9 @@ CREATE TABLE devices (
     device_status INT NOT NULL,
     device_online BOOLEAN NOT NULL,
     battery_percentage INT NOT NULL, 
-    battery_last_seen_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    battery_last_seen_timestamp TIMESTAMP WITH TIME ZONE,
     last_seen INT NOT NULL,
-    last_seen_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_seen_timestamp TIMESTAMP WITH TIME ZONE,
     link_quality INT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
