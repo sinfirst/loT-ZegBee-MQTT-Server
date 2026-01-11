@@ -21,14 +21,12 @@ type PGDB struct {
 
 func NewPGDB(conf *config.Config, logger *zap.SugaredLogger) *PGDB {
 	db, err := pgxpool.New(context.Background(), conf.DataBase.DataBaseDSN+"/postgres")
-
 	if err != nil {
 		logger.Errorw("Problem with connecting to db: ", err)
 		return nil
 	}
 
 	err = db.Ping(context.Background())
-
 	if err != nil {
 		logger.Errorw("Problem with ping to db: ", err)
 		return nil
@@ -68,8 +66,6 @@ func databaseExists(db *pgxpool.Pool, dbName string) (bool, error) {
 	return exists, nil
 
 }
-
-// ========== USER METHODS ==========
 
 func (p *PGDB) CreateUser(ctx context.Context, tgID int, username string) (string, error) {
 	var id string
@@ -131,7 +127,6 @@ func (p *PGDB) UserExistsByUserID(ctx context.Context, userID string) (bool, err
 
 func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string, error) {
 	var userID sql.NullString
-	deviceID = "0x" + deviceID //КОСТЫЛЬ)
 	query := `SELECT user_id::text FROM devices WHERE device_id = $1`
 	err := p.db.QueryRow(ctx, query, deviceID).Scan(&userID)
 	if err != nil {
@@ -148,8 +143,6 @@ func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string
 
 	return userID.String, nil
 }
-
-// ========== DEVICE METHODS ==========
 
 func (p *PGDB) CreateConnect(ctx context.Context, userID, hubID string) ([]string, error) {
 	tx, err := p.db.Begin(ctx)
@@ -269,13 +262,12 @@ func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.
 }
 
 func (p *PGDB) GetDeviceInfo(ctx context.Context, deviceID string) (models.Device, error) {
-	fmt.Println(deviceID)
 	var device models.Device
 	query := `
 		SELECT 
 			device_id, 
 			ieee_addr, 
-			user_id::text, 
+			user_id, 
 			hub_id, 
 			model_id, 
 			device_type, 
@@ -331,8 +323,7 @@ func (p *PGDB) DeviceExistByDeviceID(ctx context.Context, deviceID string) (bool
 	return exists, nil
 }
 
-// UpdateDevicesFromZbInfo обновляет или создает все устройства из ZbInfo
-func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo map[string]interface{}) error {
+func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo map[string]models.ZbDeviceInfo) error {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		p.logger.Errorw("Failed to begin transaction for ZbInfo update",
@@ -343,26 +334,14 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 	}
 	defer tx.Rollback(ctx)
 
-	for deviceID, deviceData := range zbInfo {
-		deviceInfo, ok := deviceData.(map[string]interface{})
-		if !ok {
-			p.logger.Warnw("Invalid device data in ZbInfo",
-				"device_id", deviceID,
-				"hub_id", hubID,
-			)
-			continue
-		}
+	successCount := 0
+	for deviceID, deviceInfo := range zbInfo {
+		normalizedID := models.NormalizeDeviceID(deviceID)
+		normalizedIEEE := models.NormalizeDeviceID(deviceInfo.IEEEAddr)
 
-		ieeeAddr, _ := deviceInfo["IEEEAddr"].(string)
-		modelID, _ := deviceInfo["ModelId"].(string)
-		deviceType, _ := deviceInfo["ZoneType"].(float64)
-		battery, _ := deviceInfo["BatteryPercentage"].(float64)
-		lastSeen, _ := deviceInfo["LastSeen"].(float64)
-		linkQuality, _ := deviceInfo["LinkQuality"].(float64)
-		reachable, _ := deviceInfo["Reachable"].(bool)
-
+		deviceType := models.MapZoneTypeToDeviceType(deviceInfo.ZoneType)
 		deviceStatus := 0
-		if reachable {
+		if deviceInfo.Reachable {
 			deviceStatus = 1
 		}
 
@@ -370,8 +349,9 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 			INSERT INTO devices (
 				device_id, ieee_addr, hub_id, model_id,
 				device_type, device_status, device_online, 
-				battery_percentage, last_seen, link_quality
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				battery_percentage, last_seen, link_quality,
+				created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			ON CONFLICT (device_id) DO UPDATE SET
 				ieee_addr = EXCLUDED.ieee_addr,
 				hub_id = EXCLUDED.hub_id,
@@ -386,27 +366,36 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 		`
 
 		_, err := tx.Exec(ctx, query,
-			deviceID,
-			ieeeAddr,
+			normalizedID,
+			normalizedIEEE,
 			hubID,
-			modelID,
+			deviceInfo.ModelId,
 			deviceType,
 			deviceStatus,
-			reachable,
-			int(battery),
-			int(lastSeen),
-			int(linkQuality),
+			deviceInfo.Reachable,
+			deviceInfo.BatteryPercentage,
+			deviceInfo.LastSeen,
+			deviceInfo.LinkQuality,
 		)
 
 		if err != nil {
 			p.logger.Warnw("Failed to upsert device from ZbInfo",
-				"device_id", deviceID,
+				"device_id", normalizedID,
 				"hub_id", hubID,
 				"error", err,
 			)
-			break
+			// Не прерываем транзакцию, продолжаем с другими устройствами
+			continue
 		}
+		successCount++
+	}
 
+	if successCount == 0 && len(zbInfo) > 0 {
+		p.logger.Errorw("Failed to update any devices from ZbInfo",
+			"hub_id", hubID,
+			"total_devices", len(zbInfo),
+		)
+		return fmt.Errorf("failed to update any devices")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -417,8 +406,9 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	p.logger.Debugw("Updated devices from ZbInfo in single transaction",
+	p.logger.Infow("Updated devices from ZbInfo",
 		"hub_id", hubID,
+		"successful", successCount,
 		"total", len(zbInfo),
 	)
 
@@ -441,26 +431,10 @@ func (p *PGDB) DeleteDevice(ctx context.Context, deviceID string) error {
 	return nil
 }
 
-// ========== EVENT METHODS ==========
-
-func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventData map[string]interface{}) (string, error) {
-	zbReceived, ok := eventData["ZbReceived"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("invalid ZbReceived structure")
-	}
-
-	deviceID = "0x" + deviceID //КОСТЫЛЬ)
-
-	deviceData, ok := zbReceived[deviceID].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("device %s not found in ZbReceived", deviceID)
-	}
-
-	linkQuality, _ := deviceData["LinkQuality"].(float64)
-
+func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventData models.ZbDeviceEvent, eventType string) (string, error) {
 	query := `
-		INSERT INTO events (hub_id, device_id, link_quality)
-		VALUES ($1, $2, $3)
+		INSERT INTO events (hub_id, device_id, event_type, link_quality)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id::text
 	`
 
@@ -468,7 +442,8 @@ func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventDa
 	err := p.db.QueryRow(ctx, query,
 		hubID,
 		deviceID,
-		int(linkQuality),
+		eventType,
+		eventData.LinkQuality,
 	).Scan(&eventID)
 
 	if err != nil {
@@ -484,7 +459,7 @@ func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventDa
 			updated_at = CURRENT_TIMESTAMP
 		WHERE device_id = $2
 	`
-	_, err = p.db.Exec(ctx, updateDeviceQuery, int(linkQuality), deviceID)
+	_, err = p.db.Exec(ctx, updateDeviceQuery, eventData.LinkQuality, deviceID)
 	if err != nil {
 		p.logger.Warnw("Failed to update device last_seen", "error", err, "device_id", deviceID)
 	}
@@ -494,7 +469,7 @@ func (p *PGDB) StorageEvent(ctx context.Context, hubID, deviceID string, eventDa
 
 func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]models.Event, error) {
 	hoursInt := 24
-	if h, err := fmt.Sscanf(hours, "%d", &hoursInt); err != nil || h != 1 {
+	if _, err := fmt.Sscanf(hours, "%d", &hoursInt); err != nil {
 		hoursInt = 24
 	}
 
@@ -505,7 +480,6 @@ func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]m
 			e.device_id,
 			e.event_type,
 			e.link_quality,
-			e.raw_data,
 			e.created_at
 		FROM events e
 		INNER JOIN devices d ON e.device_id = d.device_id
@@ -530,7 +504,6 @@ func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]m
 			&event.DeviceID,
 			&event.EventType,
 			&event.LinkQuality,
-			&event.RawData,
 			&event.CreatedAt,
 		)
 		if err != nil {
@@ -545,7 +518,7 @@ func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]m
 
 func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) ([]models.Event, error) {
 	hoursInt := 24
-	if h, err := fmt.Sscanf(hours, "%d", &hoursInt); err != nil || h != 1 {
+	if _, err := fmt.Sscanf(hours, "%d", &hoursInt); err != nil {
 		hoursInt = 24
 	}
 
@@ -556,7 +529,6 @@ func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) 
 			device_id,
 			event_type,
 			link_quality,
-			raw_data,
 			created_at
 		FROM events 
 		WHERE device_id = $1 
@@ -580,7 +552,6 @@ func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) 
 			&event.DeviceID,
 			&event.EventType,
 			&event.LinkQuality,
-			&event.RawData,
 			&event.CreatedAt,
 		)
 		if err != nil {
@@ -592,8 +563,6 @@ func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) 
 
 	return events, nil
 }
-
-// ========== HUB MANAGEMENT ==========
 
 func (p *PGDB) GetHubDevices(ctx context.Context, hubID string) ([]string, error) {
 	query := `SELECT device_id FROM devices WHERE hub_id = $1`
@@ -636,7 +605,6 @@ func (p *PGDB) GetUserHubID(ctx context.Context, userID string) (string, error) 
 	return hubID.String, nil
 }
 
-// GetActiveHubs возвращает список активных хабов (с привязанными пользователями)
 func (p *PGDB) GetActiveHubs(ctx context.Context) ([]string, error) {
 	query := `
 		SELECT DISTINCT hub_id 
@@ -668,7 +636,6 @@ func (p *PGDB) GetActiveHubs(ctx context.Context) ([]string, error) {
 	return hubs, nil
 }
 
-// GetHubUserID возвращает user_id для хаба
 func (p *PGDB) GetHubUserID(ctx context.Context, hubID string) (string, error) {
 	query := `
 		SELECT user_id::text 
@@ -695,7 +662,6 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 		return nil
 	}
 
-	// 1. Получаем user_id для этого хаба
 	queryGetUser := `
 		SELECT user_id 
 		FROM devices 
@@ -707,7 +673,6 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 	err := p.db.QueryRow(ctx, queryGetUser, hubID).Scan(&userID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			// Хаб еще не привязан к пользователю
 			p.logger.Debugw("Hub not assigned to any user, skipping auto-assign",
 				"hub_id", hubID,
 			)
@@ -720,7 +685,6 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 		return fmt.Errorf("get hub user: %w", err)
 	}
 
-	// Проверяем, что user_id валиден
 	if !userID.Valid || userID.Int64 == 0 {
 		p.logger.Debugw("Hub has no valid user_id assigned",
 			"hub_id", hubID,
@@ -729,7 +693,6 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 		return nil
 	}
 
-	// 2. Привязываем все устройства одним запросом
 	queryAssign := `
 		UPDATE devices 
 		SET user_id = $1, updated_at = CURRENT_TIMESTAMP

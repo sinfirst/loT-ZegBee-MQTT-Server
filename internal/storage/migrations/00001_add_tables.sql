@@ -16,7 +16,7 @@ CREATE TABLE devices (
     user_id INT,
     hub_id TEXT NOT NULL,
     model_id TEXT NOT NULL,
-    device_type INT NOT NULL,
+    device_type TEXT NOT NULL,
     device_status INT NOT NULL,
     device_online BOOLEAN NOT NULL,
     battery_percentage INT NOT NULL, 
@@ -32,6 +32,7 @@ CREATE TABLE events (
     id SERIAL PRIMARY KEY,
     hub_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
+    event_type TEXT NOT NULL DEFAULT 'unknown',
     link_quality INT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

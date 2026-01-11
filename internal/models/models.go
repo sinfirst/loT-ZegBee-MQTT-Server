@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 // Device структура соответствует таблице devices
 type Device struct {
@@ -9,13 +11,12 @@ type Device struct {
 	UserID                   string    `json:"user_id,omitempty"`
 	HubID                    string    `json:"hub_id"`
 	ModelID                  string    `json:"model_id"`
-	Manufacturer             string    `json:"manufacturer,omitempty"`
-	DeviceType               int       `json:"device_type"`
+	DeviceType               string    `json:"device_type"`
 	DeviceStatus             int       `json:"device_status"`
 	DeviceOnline             bool      `json:"device_online"`
 	BatteryPercentage        int       `json:"battery_percentage"`
 	BatteryLastSeenTimestamp time.Time `json:"battery_last_seen_timestamp"`
-	LastSeen                 int       `json:"last_seen"` // секунды
+	LastSeen                 int       `json:"last_seen"`
 	LastSeenTimestamp        time.Time `json:"last_seen_timestamp"`
 	LinkQuality              int       `json:"link_quality"`
 	CreatedAt                time.Time `json:"created_at"`
@@ -29,7 +30,6 @@ type Event struct {
 	DeviceID    string    `json:"device_id"`
 	EventType   string    `json:"event_type"`
 	LinkQuality int       `json:"link_quality"`
-	RawData     string    `json:"raw_data,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -43,21 +43,35 @@ type User struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-type ZbInfoMessage struct {
-	ZbInfo map[string]DeviceInfo `json:"ZbInfo"`
-}
-
+// ZbReceivedMessage представляет сообщение с событиями от устройств
 type ZbReceivedMessage struct {
-	ZbReceived map[string]DeviceEvent `json:"ZbReceived"`
+	ZbReceived map[string]ZbDeviceEvent `json:"ZbReceived"`
 }
 
-type DeviceInfo struct {
+// ZbDeviceEvent содержит данные события от одного устройства
+type ZbDeviceEvent struct {
+	Device               string `json:"Device"`
+	Movement             int    `json:"Movement,omitempty"`
+	ZoneStatusChange     int    `json:"ZoneStatusChange,omitempty"`
+	ZoneStatusChangeZone int    `json:"ZoneStatusChangeZone,omitempty"`
+	HexData              string `json:"0500?00,omitempty"`
+	Endpoint             int    `json:"Endpoint,omitempty"`
+	LinkQuality          int    `json:"LinkQuality"`
+}
+
+// ZbInfoMessage представляет информацию об устройствах хаба
+type ZbInfoMessage struct {
+	ZbInfo map[string]ZbDeviceInfo `json:"ZbInfo"`
+}
+
+// ZbDeviceInfo содержит информацию об устройстве
+type ZbDeviceInfo struct {
 	Device               string   `json:"Device"`
 	IEEEAddr             string   `json:"IEEEAddr"`
-	ModelID              string   `json:"ModelId"`
-	Manufacturer         string   `json:"Manufacturer"`
-	Endpoints            []int    `json:"Endpoints"`
-	Config               []string `json:"Config"`
+	ModelId              string   `json:"ModelId"`
+	Manufacturer         string   `json:"Manufacturer,omitempty"`
+	Endpoints            []int    `json:"Endpoints,omitempty"`
+	Config               []string `json:"Config,omitempty"`
 	ZoneType             int      `json:"ZoneType"`
 	ZoneStatus           int      `json:"ZoneStatus"`
 	Reachable            bool     `json:"Reachable"`
@@ -66,14 +80,4 @@ type DeviceInfo struct {
 	LastSeen             int      `json:"LastSeen"`
 	LastSeenEpoch        int64    `json:"LastSeenEpoch"`
 	LinkQuality          int      `json:"LinkQuality"`
-}
-
-type DeviceEvent struct {
-	Device               string `json:"Device"`
-	HexData              string `json:"0500?00,omitempty"`
-	ZoneStatusChange     int    `json:"ZoneStatusChange"`
-	ZoneStatusChangeZone int    `json:"ZoneStatusChangeZone"`
-	Movement             int    `json:"Movement"`
-	Endpoint             int    `json:"Endpoint"`
-	LinkQuality          int    `json:"LinkQuality"`
 }

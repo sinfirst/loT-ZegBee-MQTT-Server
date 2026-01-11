@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// SubscribeToHub подписывается на все топики хаба
 func (c *MQTTClient) SubscribeToHub(hubID string) error {
 	c.subscribedHubs.mutex.Lock()
 	defer c.subscribedHubs.mutex.Unlock()
@@ -15,7 +14,7 @@ func (c *MQTTClient) SubscribeToHub(hubID string) error {
 		return nil
 	}
 
-	sensorTopic := fmt.Sprintf("tele/%s/+", hubID)
+	sensorTopic := fmt.Sprintf("tele/%s/+/SENSOR", hubID)
 	if token := c.client.Subscribe(sensorTopic, byte(c.config.MQTT.QoS), c.messageHandler); token.Wait() && token.Error() != nil {
 		return fmt.Errorf("subscribe to %s: %w", sensorTopic, token.Error())
 	}
@@ -31,8 +30,10 @@ func (c *MQTTClient) SubscribeToHub(hubID string) error {
 	return nil
 }
 
-// UnsubscribeFromHub отписывается от топиков хаба
 func (c *MQTTClient) UnsubscribeFromHub(hubID string) error {
+	c.subscribedHubs.mutex.Lock()
+	defer c.subscribedHubs.mutex.Unlock()
+
 	if !c.subscribedHubs.hubs[hubID] {
 		return nil
 	}
@@ -47,7 +48,6 @@ func (c *MQTTClient) UnsubscribeFromHub(hubID string) error {
 	return nil
 }
 
-// RestoreSubscriptions восстанавливает подписки на хабы из БД при старте сервера
 func (c *MQTTClient) RestoreSubscriptions(hubs []string) {
 	c.logger.Infow("Restoring MQTT subscriptions", "hubs_count", len(hubs))
 
@@ -65,6 +65,7 @@ func (c *MQTTClient) RestoreSubscriptions(hubs []string) {
 		}
 	}
 }
+
 func (c *MQTTClient) Close() {
 	c.logger.Info("Closing MQTT client")
 
@@ -72,7 +73,14 @@ func (c *MQTTClient) Close() {
 		c.zbInfoTicker.Stop()
 	}
 
-	for _, hubID := range c.getSubscribedHubs() {
+	c.subscribedHubs.mutex.Lock()
+	hubs := make([]string, 0, len(c.subscribedHubs.hubs))
+	for hubID := range c.subscribedHubs.hubs {
+		hubs = append(hubs, hubID)
+	}
+	c.subscribedHubs.mutex.Unlock()
+
+	for _, hubID := range hubs {
 		c.UnsubscribeFromHub(hubID)
 		time.Sleep(100 * time.Millisecond)
 	}

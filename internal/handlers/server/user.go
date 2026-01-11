@@ -26,7 +26,6 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Валидация
 	if req.TelegramID <= 0 {
 		h.responseWithError(w, "Invalid telegram_id", http.StatusBadRequest)
 		return
@@ -36,7 +35,6 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Проверка существования пользователя
 	exist, userID, err := h.storage.UserExistsByTGID(r.Context(), req.TelegramID)
 	if err != nil {
 		h.logger.Errorw("Failed to check user existence", "error", err)
@@ -58,7 +56,6 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Создание пользователя
 	userID, err = h.storage.CreateUser(r.Context(), req.TelegramID, req.Username)
 	if err != nil {
 		h.logger.Errorw("Failed to create user", "error", err)
@@ -87,7 +84,6 @@ func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.R
 
 	userID := chi.URLParam(r, "id")
 
-	// Проверка существования пользователя
 	exist, err := h.storage.UserExistsByUserID(r.Context(), userID)
 	if err != nil {
 		h.logger.Errorw("Failed to check user existence", "error", err)
@@ -99,7 +95,6 @@ func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Получение устройств пользователя
 	devices, err := h.storage.GetDevicesByUserID(r.Context(), userID)
 	if err != nil {
 		h.logger.Errorw("Failed to get user devices", "error", err)
@@ -130,8 +125,6 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 	if hours == "" {
 		hours = "24"
 	}
-
-	// Проверка существования пользователя
 	exist, err := h.storage.UserExistsByUserID(r.Context(), userID)
 	if err != nil {
 		h.logger.Errorw("Failed to check user existence", "error", err)
@@ -143,7 +136,6 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Получение событий пользователя
 	events, err := h.storage.GetEventsByUserID(r.Context(), userID, hours)
 	if err != nil {
 		h.logger.Errorw("Failed to get user events", "error", err)
@@ -151,7 +143,6 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Если событий нет
 	if len(events) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

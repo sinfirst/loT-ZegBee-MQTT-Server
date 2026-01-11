@@ -1,15 +1,14 @@
 package mqtt
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
-// resubscribeToAllHubs переподписывается на все хабы при восстановлении соединения
 func (c *MQTTClient) resubscribeToAllHubs() {
 	for _, hubID := range c.getSubscribedHubs() {
 		if err := c.SubscribeToHub(hubID); err != nil {
@@ -20,6 +19,7 @@ func (c *MQTTClient) resubscribeToAllHubs() {
 		}
 	}
 }
+
 func (c *MQTTClient) messageHandler(client mqtt.Client, msg mqtt.Message) {
 	c.logger.Debugw("Received MQTT message",
 		"topic", msg.Topic(),
@@ -28,8 +28,8 @@ func (c *MQTTClient) messageHandler(client mqtt.Client, msg mqtt.Message) {
 	)
 
 	parts := strings.Split(msg.Topic(), "/")
-	if len(parts) < 4 {
-		c.logger.Warnw("Invalid topic format", "topic", msg.Topic())
+	if len(parts) != 4 {
+		c.logger.Debugw("Ignoring non-SENSOR topic", "topic", msg.Topic())
 		return
 	}
 
@@ -37,44 +37,72 @@ func (c *MQTTClient) messageHandler(client mqtt.Client, msg mqtt.Message) {
 	deviceID := parts[2]
 	topicType := parts[3]
 
-	var payload map[string]interface{}
-	if err := json.Unmarshal(msg.Payload(), &payload); err != nil {
-		c.logger.Errorw("Failed to unmarshal MQTT payload", "error", err, "topic", msg.Topic())
+	if topicType != "SENSOR" {
+		c.logger.Debugw("Ignoring non-SENSOR message", "topic", msg.Topic())
 		return
 	}
 
-	switch topicType {
-	case "SENSOR":
-		c.handleSensorMessage(hubID, deviceID, payload)
+	parsed, err := models.ParseMQTTPayload(msg.Payload())
+	if err != nil {
+		c.logger.Errorw("Failed to parse MQTT payload",
+			"error", err,
+			"topic", msg.Topic(),
+		)
+		return
+	}
+
+	switch v := parsed.(type) {
+	case models.ZbReceivedMessage:
+		c.handleZbReceivedMessage(hubID, deviceID, v)
+	case models.ZbInfoMessage:
+		c.handleZbInfoMessage(hubID, v)
 	default:
-		c.logger.Debugw("Unknown topic type", "type", topicType, "topic", msg.Topic())
+		c.logger.Debugw("Unknown message type", "topic", msg.Topic())
 	}
 
 	msg.Ack()
 }
 
-func (c *MQTTClient) handleSensorMessage(hubID, deviceID string, payload map[string]interface{}) {
-	if _, ok := payload["ZbReceived"]; ok {
-		if err := c.handlers.EventHandler(hubID, deviceID, payload); err != nil {
+func (c *MQTTClient) handleZbReceivedMessage(hubID, deviceID string, msg models.ZbReceivedMessage) {
+	if !msg.IsMovementEvent() {
+		c.logger.Debugw("Ignoring status message", "hub_id", hubID, "device_id", deviceID)
+		return
+	}
+
+	normalizedID := models.NormalizeDeviceID(deviceID)
+
+	for msgDeviceID, event := range msg.ZbReceived {
+		msgNormalizedID := models.NormalizeDeviceID(msgDeviceID)
+
+		if msgNormalizedID != normalizedID {
+			c.logger.Debugw("Device ID mismatch in message",
+				"hub_id", hubID,
+				"topic_device_id", normalizedID,
+				"message_device_id", msgNormalizedID,
+			)
+			continue
+		}
+
+		if err := c.handlers.EventHandler(hubID, event); err != nil {
 			c.logger.Errorw("Failed to handle event",
 				"hub_id", hubID,
-				"device_id", deviceID,
+				"device_id", normalizedID,
 				"error", err,
 			)
 		}
-	} else if _, ok := payload["ZbInfo"]; ok {
-		if err := c.handlers.ZbInfoHandler(hubID, payload); err != nil {
-			c.logger.Errorw("Failed to handle ZbInfo",
-				"hub_id", hubID,
-				"error", err,
-			)
-		}
-	} else {
-		c.logger.Debugw("Unknown sensor message type", "hub_id", hubID, "device_id", deviceID)
+		break
 	}
 }
 
-// Запрос информации об устройствах хаба
+func (c *MQTTClient) handleZbInfoMessage(hubID string, msg models.ZbInfoMessage) {
+	if err := c.handlers.ZbInfoHandler(hubID, msg.ZbInfo); err != nil {
+		c.logger.Errorw("Failed to handle ZbInfo",
+			"hub_id", hubID,
+			"error", err,
+		)
+	}
+}
+
 func (c *MQTTClient) requestZbInfo(hubID string) {
 	topic := fmt.Sprintf("cmnd/%s/ZbInfo", hubID)
 	payload := ""
@@ -89,7 +117,6 @@ func (c *MQTTClient) requestZbInfo(hubID string) {
 	}
 }
 
-// startZbInfoPoller периодически опрашивает все подписанные хабы
 func (c *MQTTClient) startZbInfoPoller() {
 	defer c.zbInfoTicker.Stop()
 
@@ -110,7 +137,6 @@ func (c *MQTTClient) startZbInfoPoller() {
 	}
 }
 
-// getSubscribedHubs возвращает список подписанных хабов
 func (c *MQTTClient) getSubscribedHubs() []string {
 	c.subscribedHubs.mutex.RLock()
 	defer c.subscribedHubs.mutex.RUnlock()

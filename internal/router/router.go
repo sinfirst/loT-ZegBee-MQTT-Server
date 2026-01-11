@@ -10,11 +10,13 @@ func NewRouter(h *server.HTTPServerHandlers) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(logging.WithLogging)
 
+	r.Get("/api/user/{id}/devices", h.UserDevicesHandler)
+
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/user", func(r chi.Router) {
 			r.Post("/register", h.RegisterUserHandler)
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/devices", h.UserDevicesHandler)
+				//r.Get("/devices", h.UserDevicesHandler)
 				r.Get("/events", h.HistoryEventsHandler)
 			})
 		})

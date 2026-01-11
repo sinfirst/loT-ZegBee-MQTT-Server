@@ -7,29 +7,25 @@ import (
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
-// ZbInfoHandler обрабатывает информацию об устройствах хаба
-func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]interface{}) error {
-	zbInfoData, ok := zbInfo["ZbInfo"].(map[string]interface{})
-	if !ok {
-		errMsg := "invalid ZbInfo structure"
-		c.logger.Errorw(errMsg, "hub_id", hubID, "data", zbInfo)
-		return c.ErrorHandler(hubID, "", "zbinfo_parse_error", errMsg)
+func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]models.ZbDeviceInfo) error {
+	if len(zbInfo) == 0 {
+		return c.ErrorHandler(hubID, "", "empty_zbinfo", "Received empty ZbInfo")
 	}
 
-	deviceIDs := make([]string, 0, len(zbInfoData))
-	for deviceID := range zbInfoData {
-		deviceIDs = append(deviceIDs, deviceID)
+	deviceIDs := make([]string, 0, len(zbInfo))
+	for deviceID := range zbInfo {
+		deviceIDs = append(deviceIDs, models.NormalizeDeviceID(deviceID))
 	}
 
-	err := c.storage.UpdateDevicesFromZbInfo(context.Background(), hubID, zbInfoData)
+	err := c.storage.UpdateDevicesFromZbInfo(context.Background(), hubID, zbInfo)
 	if err != nil {
 		c.logger.Errorw("Failed to update devices from ZbInfo",
 			"hub_id", hubID,
 			"error", err,
-			"device_count", len(zbInfoData),
+			"device_count", len(zbInfo),
 		)
 		return c.ErrorHandler(hubID, "", "zbinfo_update_error",
-			fmt.Sprintf("Failed to update %d devices: %v", len(zbInfoData), err))
+			fmt.Sprintf("Failed to update %d devices: %v", len(zbInfo), err))
 	}
 
 	if len(deviceIDs) > 0 {
@@ -43,15 +39,18 @@ func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]interface
 
 	c.logger.Infow("Processed ZbInfo",
 		"hub_id", hubID,
-		"total_devices", len(zbInfoData),
+		"total_devices", len(zbInfo),
 	)
 
 	return nil
 }
 
-// EventHandler обрабатывает события от датчиков
-func (c *ClientHandlers) EventHandler(hubID, deviceID string, eventData map[string]interface{}) error {
-	eventID, err := c.storage.StorageEvent(context.Background(), hubID, deviceID, eventData)
+func (c *ClientHandlers) EventHandler(hubID string, eventData models.ZbDeviceEvent) error {
+	deviceID := models.NormalizeDeviceID(eventData.Device)
+
+	eventType := determineEventTypeLogic(eventData)
+
+	eventID, err := c.storage.StorageEvent(context.Background(), hubID, deviceID, eventData, eventType)
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to save event to DB: %v", err)
 		c.logger.Errorw(errMsg,
@@ -66,9 +65,10 @@ func (c *ClientHandlers) EventHandler(hubID, deviceID string, eventData map[stri
 		"event_id", eventID,
 		"hub_id", hubID,
 		"device_id", deviceID,
+		"event_type", eventType,
 	)
 
-	if c.shouldNotifyUser(eventData) {
+	if eventData.Movement == 1 {
 		userID, err := c.storage.GetUserIDByDeviceID(context.Background(), deviceID)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to get user_id for device: %v", err)
@@ -91,7 +91,7 @@ func (c *ClientHandlers) EventHandler(hubID, deviceID string, eventData map[stri
 			ID:        eventID,
 			HubID:     hubID,
 			DeviceID:  deviceID,
-			EventType: "movement",
+			EventType: eventType,
 		}
 
 		if err := c.pushEvent(event, userID); err != nil {
@@ -108,20 +108,26 @@ func (c *ClientHandlers) EventHandler(hubID, deviceID string, eventData map[stri
 	return nil
 }
 
-// shouldNotifyUser проверяет, нужно ли отправлять уведомление
-func (c *ClientHandlers) shouldNotifyUser(eventData map[string]interface{}) bool {
-	zbReceived, ok := eventData["ZbReceived"].(map[string]interface{})
-	if !ok {
-		return false
+func determineEventTypeLogic(event models.ZbDeviceEvent) string {
+	if event.Movement != 1 {
+		return "status"
 	}
 
-	for _, deviceData := range zbReceived {
-		if data, ok := deviceData.(map[string]interface{}); ok {
-			if movement, ok := data["Movement"].(float64); ok && movement == 1 {
-				return true
-			}
-		}
+	if event.ZoneStatusChange&0x01 != 0 {
+		return "alarm"
 	}
 
-	return false
+	if event.ZoneStatusChange&0x08 != 0 {
+		return "tamper"
+	}
+
+	if event.ZoneStatusChange&0x10 != 0 {
+		return "low_battery"
+	}
+
+	if event.LinkQuality < 50 {
+		return "weak_signal"
+	}
+
+	return "movement"
 }

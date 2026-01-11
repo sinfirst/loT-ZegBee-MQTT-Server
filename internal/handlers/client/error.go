@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// ErrorHandler отправляет уведомление об ошибке
 func (c *ClientHandlers) ErrorHandler(hubID, deviceID, errorType, message string) error {
 	type errorNotification struct {
 		UserID    string    `json:"user_id,omitempty"`
@@ -25,12 +24,13 @@ func (c *ClientHandlers) ErrorHandler(hubID, deviceID, errorType, message string
 	}
 
 	var userID string
+	ctx := context.Background()
 	if hubID != "" {
-		if uid, err := c.storage.GetHubUserID(context.Background(), hubID); err == nil {
+		if uid, err := c.storage.GetHubUserID(ctx, hubID); err == nil {
 			userID = uid
 		}
 	} else if deviceID != "" {
-		if uid, err := c.storage.GetUserIDByDeviceID(context.Background(), deviceID); err == nil {
+		if uid, err := c.storage.GetUserIDByDeviceID(ctx, deviceID); err == nil {
 			userID = uid
 		}
 	}

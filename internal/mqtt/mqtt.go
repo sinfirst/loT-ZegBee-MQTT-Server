@@ -7,12 +7,13 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/config"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 	"go.uber.org/zap"
 )
 
 type Handlers interface {
-	EventHandler(hubID, deviceID string, eventData map[string]interface{}) error
-	ZbInfoHandler(hubID string, zbInfo map[string]interface{}) error
+	EventHandler(hubID string, deviceEvent models.ZbDeviceEvent) error
+	ZbInfoHandler(hubID string, zbInfo map[string]models.ZbDeviceInfo) error
 	ErrorHandler(hubID, deviceID, errorType, message string) error
 }
 

@@ -79,15 +79,16 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 			)
 		}
 
-		h.responseWithError(w, "Failed to register devices", http.StatusInternalServerError)
+		h.responseWithError(w, "Failed to register hub", http.StatusInternalServerError)
 		return
 	}
 
+	message := "Hub registered successfully"
 	if len(devicesID) == 0 {
-		h.logger.Warnw("Hub registered but no devices found",
+		message = "Hub registered successfully. Devices will be added when detected. Check api/user/devices"
+		h.logger.Infow("Hub registered, waiting for devices",
 			"hub_id", req.HubID,
 			"user_id", req.UserID,
-			"devices_from_hub", len(devicesID),
 		)
 	}
 
@@ -97,7 +98,7 @@ func (h *HTTPServerHandlers) RegisterDeviceHandler(w http.ResponseWriter, r *htt
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:    "ok",
 		DevicesID: devicesID,
-		Message:   "Devices registered successfully",
+		Message:   message,
 	})
 	if err != nil {
 		h.logger.Errorw("Failed to encode response", "error", err)
