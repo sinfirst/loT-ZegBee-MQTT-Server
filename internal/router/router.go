@@ -10,28 +10,21 @@ func NewRouter(h *server.HTTPServerHandlers) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(logging.WithLogging)
 
+	// User endpoints
+	r.Post("/api/user/register", h.RegisterUserHandler)
 	r.Get("/api/user/{id}/devices", h.UserDevicesHandler)
+	r.Get("/api/user/{id}/events", h.HistoryEventsHandler)
 
-	r.Route("/api", func(r chi.Router) {
-		r.Route("/user", func(r chi.Router) {
-			r.Post("/register", h.RegisterUserHandler)
-			r.Route("/{id}", func(r chi.Router) {
-				//r.Get("/devices", h.UserDevicesHandler)
-				r.Get("/events", h.HistoryEventsHandler)
-			})
-		})
+	// Device endpoints
+	r.Get("/api/device/{id}", h.DeviceInfoHandler)
+	r.Get("/api/device/{id}/events", h.DeviceHistoryHandler)
 
-		r.Route("/device", func(r chi.Router) {
-			r.Post("/register", h.RegisterDeviceHandler)
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", h.DeviceInfoHandler)
-				r.Delete("/", h.DeleteDeviceHandler)
-				r.Get("/events", h.DeviceHistoryHandler)
-			})
-		})
+	//Hub endpoints
+	r.Post("/api/hub/register", h.RegisterHubHandler)
+	r.Delete("/api/device/{id}", h.DeleteHubHandler)
 
-		r.Get("/health", h.HealthCheckHandler)
-	})
+	// Health check
+	r.Get("/api/health", h.HealthCheckHandler)
 
 	return r
 }

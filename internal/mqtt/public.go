@@ -43,7 +43,6 @@ func (c *MQTTClient) UnsubscribeFromHub(hubID string) error {
 		c.logger.Warnw("Failed to unsubscribe from sensor topic", "hub_id", hubID, "error", token.Error())
 	}
 
-	delete(c.subscribedHubs.hubs, hubID)
 	c.logger.Infow("Unsubscribed from hub", "hub_id", hubID)
 	return nil
 }

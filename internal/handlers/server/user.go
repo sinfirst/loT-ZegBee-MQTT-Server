@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
@@ -82,7 +81,11 @@ func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.R
 		Devices []models.Device `json:"devices"`
 	}
 
-	userID := chi.URLParam(r, "id")
+	userID, err := h.getIDFromURLPath(r, "/api/user/")
+	if err != nil {
+		h.responseWithError(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
 
 	exist, err := h.storage.UserExistsByUserID(r.Context(), userID)
 	if err != nil {
@@ -120,7 +123,12 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		Events []models.Event `json:"events"`
 	}
 
-	userID := chi.URLParam(r, "id")
+	userID, err := h.getIDFromURLPath(r, "/api/user/")
+	if err != nil {
+		h.responseWithError(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	
 	hours := r.URL.Query().Get("hours")
 	if hours == "" {
 		hours = "24"

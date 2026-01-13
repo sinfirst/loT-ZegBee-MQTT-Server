@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -130,7 +131,7 @@ func (p *PGDB) GetUserIDByDeviceID(ctx context.Context, deviceID string) (string
 	query := `SELECT user_id::text FROM devices WHERE device_id = $1`
 	err := p.db.QueryRow(ctx, query, deviceID).Scan(&userID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return "", fmt.Errorf("device not found: %s", deviceID)
 		}
 		p.logger.Errorw("Failed to get user_id by device_id", "error", err)
@@ -190,15 +191,30 @@ func (p *PGDB) CreateConnect(ctx context.Context, userID, hubID string) ([]strin
 	return deviceIDs, nil
 }
 
-func (p *PGDB) ConnectExistByHubID(ctx context.Context, hubID string) (bool, error) {
-	var exists bool
-	query := `SELECT EXISTS(SELECT 1 FROM devices WHERE hub_id = $1 AND user_id IS NOT NULL)`
-	err := p.db.QueryRow(ctx, query, hubID).Scan(&exists)
+func (p *PGDB) GetHubConnectedUser(ctx context.Context, hubID string) (string, error) {
+	query := `
+		SELECT user_id::text 
+		FROM devices 
+		WHERE hub_id = $1 
+		AND user_id IS NOT NULL
+		LIMIT 1
+	`
+
+	var userID sql.NullString
+	err := p.db.QueryRow(ctx, query, hubID).Scan(&userID)
 	if err != nil {
-		p.logger.Errorw("Failed to check hub connection", "error", err)
-		return false, fmt.Errorf("check hub connection: %w", err)
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		p.logger.Errorw("Failed to get hub connected user", "hub_id", hubID, "error", err)
+		return "", fmt.Errorf("get hub connected user: %w", err)
 	}
-	return exists, nil
+
+	if !userID.Valid || userID.String == "" {
+		return "", nil
+	}
+
+	return userID.String, nil
 }
 
 func (p *PGDB) GetDevicesByUserID(ctx context.Context, userID string) ([]models.Device, error) {
@@ -267,7 +283,7 @@ func (p *PGDB) GetDeviceInfo(ctx context.Context, deviceID string) (models.Devic
 		SELECT 
 			device_id, 
 			ieee_addr, 
-			user_id, 
+			COALESCE(user_id::text, '') as user_id,
 			hub_id, 
 			model_id, 
 			device_type, 
@@ -302,8 +318,8 @@ func (p *PGDB) GetDeviceInfo(ctx context.Context, deviceID string) (models.Devic
 		&device.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return models.Device{}, fmt.Errorf("device not found: %s", deviceID)
+		if err == pgx.ErrNoRows {
+			return models.Device{}, fmt.Errorf("not found")
 		}
 		p.logger.Errorw("Failed to get device info", "error", err)
 		return models.Device{}, fmt.Errorf("get device info: %w", err)
@@ -345,13 +361,19 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 			deviceStatus = 1
 		}
 
+		batteryLastSeenTimestamp, lastSeenTimestamp := time.Time{}, time.Time{}
+		if deviceInfo.BatteryLastSeenEpoch != 0 && deviceInfo.LastSeenEpoch != 0 {
+			batteryLastSeenTimestamp = time.Unix(deviceInfo.BatteryLastSeenEpoch, 0)
+			lastSeenTimestamp = time.Unix(deviceInfo.LastSeenEpoch, 0)
+		}
+
 		query := `
 			INSERT INTO devices (
 				device_id, ieee_addr, hub_id, model_id,
 				device_type, device_status, device_online, 
-				battery_percentage, last_seen, link_quality,
+				battery_percentage, battery_last_seen_timestamp, last_seen, last_seen_timestamp, link_quality,
 				created_at, updated_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 			ON CONFLICT (device_id) DO UPDATE SET
 				ieee_addr = EXCLUDED.ieee_addr,
 				hub_id = EXCLUDED.hub_id,
@@ -360,7 +382,9 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 				device_status = EXCLUDED.device_status,
 				device_online = EXCLUDED.device_online,
 				battery_percentage = EXCLUDED.battery_percentage,
+				battery_last_seen_timestamp = EXCLUDED.battery_last_seen_timestamp,
 				last_seen = EXCLUDED.last_seen,
+				last_seen_timestamp = EXCLUDED.last_seen_timestamp,
 				link_quality = EXCLUDED.link_quality,
 				updated_at = CURRENT_TIMESTAMP
 		`
@@ -374,7 +398,9 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 			deviceStatus,
 			deviceInfo.Reachable,
 			deviceInfo.BatteryPercentage,
+			batteryLastSeenTimestamp,
 			deviceInfo.LastSeen,
+			lastSeenTimestamp,
 			deviceInfo.LinkQuality,
 		)
 
@@ -384,7 +410,6 @@ func (p *PGDB) UpdateDevicesFromZbInfo(ctx context.Context, hubID string, zbInfo
 				"hub_id", hubID,
 				"error", err,
 			)
-			// Не прерываем транзакцию, продолжаем с другими устройствами
 			continue
 		}
 		successCount++
@@ -586,12 +611,32 @@ func (p *PGDB) GetHubDevices(ctx context.Context, hubID string) ([]string, error
 	return deviceIDs, nil
 }
 
+// DeleteHubDevices удаляет все устройства хаба
+func (p *PGDB) DeleteHubDevices(ctx context.Context, hubID string) (int, error) {
+	query := `DELETE FROM devices WHERE hub_id = $1`
+	result, err := p.db.Exec(ctx, query, hubID)
+	if err != nil {
+		return 0, fmt.Errorf("delete hub devices: %w", err)
+	}
+	return int(result.RowsAffected()), nil
+}
+
+// UnassignHubFromUser убирает hub_id у пользователя
+func (p *PGDB) UnassignHubFromUser(ctx context.Context, hubID string) error {
+	query := `UPDATE users SET hub_id = NULL WHERE hub_id = $1`
+	_, err := p.db.Exec(ctx, query, hubID)
+	if err != nil {
+		return fmt.Errorf("unassign hub from user: %w", err)
+	}
+	return nil
+}
+
 func (p *PGDB) GetUserHubID(ctx context.Context, userID string) (string, error) {
 	var hubID sql.NullString
 	query := `SELECT hub_id FROM users WHERE id = $1`
 	err := p.db.QueryRow(ctx, query, userID).Scan(&hubID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return "", fmt.Errorf("user not found")
 		}
 		p.logger.Errorw("Failed to get user hub_id", "error", err)
@@ -647,7 +692,7 @@ func (p *PGDB) GetHubUserID(ctx context.Context, hubID string) (string, error) {
 	var userID string
 	err := p.db.QueryRow(ctx, query, hubID).Scan(&userID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return "", fmt.Errorf("no user found for hub %s", hubID)
 		}
 		p.logger.Errorw("Failed to get hub user_id", "hub_id", hubID, "error", err)

@@ -34,7 +34,7 @@ func (c *ClientHandlers) pushEvent(event models.Event, userID string) error {
 		UserID:    userID,
 		DeviceID:  event.DeviceID,
 		Event:     eventType,
-		Timestamp: time.Now().UTC(),
+		Timestamp: time.Now(),
 	}
 
 	jsonData, err := json.Marshal(notification)
