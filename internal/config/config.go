@@ -13,6 +13,7 @@ import (
 // Config основная структура конфигурации
 type Config struct {
 	App      AppConfig      `yaml:"app"`
+	Notify   NotifyConfig   `yaml:"notify"`
 	Log      LogConfig      `yaml:"log"`
 	MQTT     MQTTConfig     `yaml:"mqtt"`
 	HTTP     HTTPConfig     `yaml:"http"`
@@ -24,6 +25,12 @@ type AppConfig struct {
 	Version string `yaml:"version"`
 }
 
+type NotifyConfig struct {
+	NotificationTiker int `yaml:"check_event_ticker"`
+	MinEventForNotify int `yaml:"min_event_for_notify"`
+	MaxVariation      int `yaml:"max_variation"`
+	DropLinkQuality   int `yaml:"drop_link_quality"`
+}
 type LogConfig struct {
 	Level  string `yaml:"level"`
 	Output string `yaml:"output,omitempty"`

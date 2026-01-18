@@ -15,17 +15,23 @@ type subscribeToDevices interface {
 	UnsubscribeFromHub(string) error
 }
 
-type HTTPServerHandlers struct {
-	logger   *zap.SugaredLogger
-	storage  *storage.PGDB
-	mqttFunc subscribeToDevices
+type notificator interface {
+	StartPooler(string, string)
 }
 
-func NewHTTPServerHandlers(logger *zap.SugaredLogger, storage *storage.PGDB, mqtt subscribeToDevices) *HTTPServerHandlers {
+type HTTPServerHandlers struct {
+	logger      *zap.SugaredLogger
+	storage     *storage.PGDB
+	mqttFunc    subscribeToDevices
+	notificator notificator
+}
+
+func NewHTTPServerHandlers(logger *zap.SugaredLogger, storage *storage.PGDB, mqtt subscribeToDevices, notificator notificator) *HTTPServerHandlers {
 	return &HTTPServerHandlers{
-		logger:   logger,
-		storage:  storage,
-		mqttFunc: mqtt,
+		logger:      logger,
+		storage:     storage,
+		mqttFunc:    mqtt,
+		notificator: notificator,
 	}
 }
 

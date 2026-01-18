@@ -67,67 +67,13 @@ func (c *ClientHandlers) EventHandler(hubID string, eventData models.ZbDeviceEve
 		"device_id", deviceID,
 		"event_type", eventType,
 	)
-
-	if eventData.Movement == 1 {
-		userID, err := c.storage.GetUserIDByDeviceID(context.Background(), deviceID)
-		if err != nil {
-			errMsg := fmt.Sprintf("Failed to get user_id for device: %v", err)
-			c.logger.Warnw(errMsg,
-				"device_id", deviceID,
-				"error", err,
-			)
-			return c.ErrorHandler(hubID, deviceID, "user_lookup_error", errMsg)
-		}
-
-		if userID == "" {
-			c.logger.Warnw("Device not assigned to any user",
-				"hub_id", hubID,
-				"device_id", deviceID,
-			)
-			return nil
-		}
-
-		event := models.Event{
-			ID:        eventID,
-			HubID:     hubID,
-			DeviceID:  deviceID,
-			EventType: eventType,
-		}
-
-		if err := c.pushEvent(event, userID); err != nil {
-			errMsg := fmt.Sprintf("Failed to send notification: %v", err)
-			c.logger.Errorw(errMsg,
-				"user_id", userID,
-				"device_id", deviceID,
-				"error", err,
-			)
-			return c.ErrorHandler(hubID, deviceID, "notification_error", errMsg)
-		}
-	}
-
 	return nil
 }
 
 func determineEventTypeLogic(event models.ZbDeviceEvent) string {
 	if event.Movement != 1 {
-		return "status"
+		return "device_on"
 	}
 
-	if event.ZoneStatusChange&0x01 != 0 {
-		return "alarm"
-	}
-
-	if event.ZoneStatusChange&0x08 != 0 {
-		return "tamper"
-	}
-
-	if event.ZoneStatusChange&0x10 != 0 {
-		return "low_battery"
-	}
-
-	if event.LinkQuality < 50 {
-		return "weak_signal"
-	}
-
-	return "movement"
+	return "movement_detection"
 }

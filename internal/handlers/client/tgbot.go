@@ -11,7 +11,7 @@ import (
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
 )
 
-func (c *ClientHandlers) pushEvent(event models.Event, userID string) error {
+func (c *ClientHandlers) PushEvent(event models.Event, userID string) error {
 	type botNotification struct {
 		UserID    string    `json:"user_id"`
 		DeviceID  string    `json:"device_id"`

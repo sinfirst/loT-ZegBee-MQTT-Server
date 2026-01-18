@@ -771,6 +771,53 @@ func (p *PGDB) AutoAssignNewDevices(ctx context.Context, hubID string, deviceIDs
 	return nil
 }
 
+// GetRecentEventsByDeviceID возвращает все события устройства за последние N секунд
+func (p *PGDB) GetRecentEventsByDeviceID(ctx context.Context, deviceID string, seconds int) ([]models.Event, error) {
+	query := `
+		SELECT 
+			id::text,
+			hub_id,
+			device_id,
+			event_type,
+			link_quality,
+			created_at
+		FROM events 
+		WHERE device_id = $1
+		AND created_at >= NOW() - ($2 * INTERVAL '1 second')
+		ORDER BY created_at ASC
+	`
+
+	rows, err := p.db.Query(ctx, query, deviceID, seconds)
+	if err != nil {
+		p.logger.Errorw("Failed to get recent events for device",
+			"device_id", deviceID,
+			"seconds", seconds,
+			"error", err)
+		return nil, fmt.Errorf("get recent events for device: %w", err)
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var event models.Event
+		err := rows.Scan(
+			&event.ID,
+			&event.HubID,
+			&event.DeviceID,
+			&event.EventType,
+			&event.LinkQuality,
+			&event.CreatedAt,
+		)
+		if err != nil {
+			p.logger.Errorw("Failed to scan event", "device_id", deviceID, "error", err)
+			continue
+		}
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
 func InitMigrations(conf *config.Config) error {
 	db, err := sql.Open("pgx", conf.DataBase.DataBaseDSN+"/"+conf.DataBase.Name)
 	if err != nil {

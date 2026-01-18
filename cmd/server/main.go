@@ -13,6 +13,7 @@ import (
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/handlers/server"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/middleware/logging"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/mqtt"
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/notification"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/router"
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/storage"
 )
@@ -57,7 +58,9 @@ func main() {
 
 	logger.Info("MQTT client initialized successfully")
 
-	HTTPServerHandlers := server.NewHTTPServerHandlers(logger, db, mqttClient)
+	notificator := notification.NewNotificationPoolerStruct(db, HTTPClient, conf, logger)
+
+	HTTPServerHandlers := server.NewHTTPServerHandlers(logger, db, mqttClient, notificator)
 
 	router := router.NewRouter(HTTPServerHandlers)
 
@@ -93,6 +96,8 @@ func main() {
 		if mqttClient != nil {
 			mqttClient.Close()
 		}
+
+		notificator.Stop()
 
 		if err := HTTPServer.Shutdown(ctx); err != nil {
 			logger.Errorw("Failed to shutdown HTTP server gracefully", "error", err)

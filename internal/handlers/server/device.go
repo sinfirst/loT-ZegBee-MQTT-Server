@@ -109,6 +109,10 @@ func (h *HTTPServerHandlers) RegisterHubHandler(w http.ResponseWriter, r *http.R
 		)
 	}
 
+	for _, deviceID := range devicesID {
+		go h.notificator.StartPooler(deviceID, req.UserID)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
