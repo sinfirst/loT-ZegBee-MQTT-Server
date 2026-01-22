@@ -81,3 +81,4 @@ type ZbDeviceInfo struct {
 	LastSeenEpoch        int64    `json:"LastSeenEpoch"`
 	LinkQuality          int      `json:"LinkQuality"`
 }
+

@@ -110,7 +110,7 @@ func (h *HTTPServerHandlers) RegisterHubHandler(w http.ResponseWriter, r *http.R
 	}
 
 	for _, deviceID := range devicesID {
-		go h.notificator.StartPooler(deviceID, req.UserID)
+		h.notificator.StartPollingForDevice(deviceID, req.UserID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -128,8 +128,8 @@ func (h *HTTPServerHandlers) RegisterHubHandler(w http.ResponseWriter, r *http.R
 
 func (h *HTTPServerHandlers) DeviceInfoHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
-		Status string        `json:"status"`
-		Device models.Device `json:"device"`
+		Status string          `json:"status"`
+		Device DeviceForAnswer `json:"device"`
 	}
 
 	deviceID, err := h.getIDFromURLPath(r, "/api/device/")
@@ -153,9 +153,21 @@ func (h *HTTPServerHandlers) DeviceInfoHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
+	newDevice := DeviceForAnswer{
+		DeviceID:          device.DeviceID,
+		IEEEAddr:          device.IEEEAddr,
+		UserID:            device.UserID,
+		HubID:             device.HubID,
+		ModelID:           device.ModelID,
+		DeviceType:        device.DeviceType,
+		DeviceOnline:      device.DeviceOnline,
+		BatteryPercentage: device.BatteryPercentage,
+		LastSeen:          device.LastSeenTimestamp,
+	}
+
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status: "ok",
-		Device: device,
+		Device: newDevice,
 	})
 	if err != nil {
 		h.logger.Errorw("Failed to encode response", "error", err)
@@ -225,11 +237,11 @@ func (h *HTTPServerHandlers) DeviceHistoryHandler(w http.ResponseWriter, r *http
 func (h *HTTPServerHandlers) DeleteHubHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
 		Status         string   `json:"status"`
-		Message        string   `json:"message"`
 		DeletedDevices []string `json:"deleted_devices,omitempty"`
+		Message        string   `json:"message"`
 	}
 
-	hubID, err := h.getIDFromURLPath(r, "/api/device/")
+	hubID, err := h.getIDFromURLPath(r, "/api/hub/")
 	if err != nil {
 		h.responseWithError(w, "Invalid path", http.StatusBadRequest)
 		return

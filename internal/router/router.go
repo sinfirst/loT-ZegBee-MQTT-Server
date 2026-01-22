@@ -21,7 +21,7 @@ func NewRouter(h *server.HTTPServerHandlers) *chi.Mux {
 
 	//Hub endpoints
 	r.Post("/api/hub/register", h.RegisterHubHandler)
-	r.Delete("/api/device/{id}", h.DeleteHubHandler)
+	r.Delete("/api/hub/{id}", h.DeleteHubHandler)
 
 	// Health check
 	r.Get("/api/health", h.HealthCheckHandler)

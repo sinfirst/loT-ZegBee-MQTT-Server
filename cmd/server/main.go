@@ -58,9 +58,17 @@ func main() {
 
 	logger.Info("MQTT client initialized successfully")
 
-	notificator := notification.NewNotificationPoolerStruct(db, HTTPClient, conf, logger)
+	notificationPooler := notification.NewNotificationPoolerStruct(
+		db,
+		HTTPClient,
+		conf,
+		logger,
+	)
 
-	HTTPServerHandlers := server.NewHTTPServerHandlers(logger, db, mqttClient, notificator)
+	notificationPooler.RestorePollers()
+	logger.Infow("Restored notify pollers")
+
+	HTTPServerHandlers := server.NewHTTPServerHandlers(logger, db, mqttClient, notificationPooler)
 
 	router := router.NewRouter(HTTPServerHandlers)
 
@@ -97,7 +105,7 @@ func main() {
 			mqttClient.Close()
 		}
 
-		notificator.Stop()
+		notificationPooler.StopAll()
 
 		if err := HTTPServer.Shutdown(ctx); err != nil {
 			logger.Errorw("Failed to shutdown HTTP server gracefully", "error", err)

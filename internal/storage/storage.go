@@ -509,7 +509,7 @@ func (p *PGDB) GetEventsByUserID(ctx context.Context, userID, hours string) ([]m
 		FROM events e
 		INNER JOIN devices d ON e.device_id = d.device_id
 		WHERE d.user_id = $1 
-			AND e.created_at >= NOW() - ($2 || ' hours')::INTERVAL
+			AND e.created_at >= NOW() - ($2 * INTERVAL '1 hour')
 		ORDER BY e.created_at DESC
 	`
 
@@ -557,7 +557,7 @@ func (p *PGDB) GetEventsByDeviceID(ctx context.Context, deviceID, hours string) 
 			created_at
 		FROM events 
 		WHERE device_id = $1 
-			AND created_at >= NOW() - ($2 || ' hours')::INTERVAL
+			AND created_at >= NOW() - ($2 * INTERVAL '1 hour')
 		ORDER BY created_at DESC
 	`
 
@@ -830,4 +830,42 @@ func InitMigrations(conf *config.Config) error {
 	}
 
 	return nil
+}
+
+// GetDeviceUserPairs возвращает пары device_id - user_id для всех устройств с пользователями
+func (p *PGDB) GetDeviceUserPairs(ctx context.Context) ([]string, []string, error) {
+	query := `
+		SELECT DISTINCT 
+			device_id,
+			user_id::text
+		FROM devices 
+		WHERE user_id IS NOT NULL
+		AND device_id IS NOT NULL
+		AND device_id != ''
+		AND user_id::text != ''
+	`
+
+	rows, err := p.db.Query(ctx, query)
+	if err != nil {
+		p.logger.Errorw("Failed to get device-user pairs", "error", err)
+		return nil, nil, fmt.Errorf("get device-user pairs: %w", err)
+	}
+	defer rows.Close()
+
+	var deviceIDs []string
+	var userIDs []string
+
+	for rows.Next() {
+		var deviceID, userID string
+		if err := rows.Scan(&deviceID, &userID); err != nil {
+			p.logger.Warnw("Failed to scan device-user pair", "error", err)
+			continue
+		}
+
+		deviceIDs = append(deviceIDs, deviceID)
+		userIDs = append(userIDs, userID)
+	}
+
+	p.logger.Debugw("Found device-user pairs", "count", len(deviceIDs))
+	return deviceIDs, userIDs, nil
 }

@@ -47,7 +47,7 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 		err = json.NewEncoder(w).Encode(statusSuccess{
 			Status:  "ok",
 			UserID:  userID,
-			Message: "User registered successfully",
+			Message: "User already registered",
 		})
 		if err != nil {
 			h.logger.Errorw("Failed to encode response", "error", err)
@@ -77,8 +77,8 @@ func (h *HTTPServerHandlers) RegisterUserHandler(w http.ResponseWriter, r *http.
 
 func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	type statusSuccess struct {
-		Status  string          `json:"status"`
-		Devices []models.Device `json:"devices"`
+		Status  string            `json:"status"`
+		Devices []DeviceForAnswer `json:"devices"`
 	}
 
 	userID, err := h.getIDFromURLPath(r, "/api/user/")
@@ -104,13 +104,27 @@ func (h *HTTPServerHandlers) UserDevicesHandler(w http.ResponseWriter, r *http.R
 		h.responseWithError(w, "Failed to get devices", http.StatusInternalServerError)
 		return
 	}
+	var newDevices []DeviceForAnswer
+	for _, device := range devices {
+		newDevices = append(newDevices, DeviceForAnswer{
+			DeviceID:          device.DeviceID,
+			IEEEAddr:          device.IEEEAddr,
+			UserID:            device.UserID,
+			HubID:             device.HubID,
+			ModelID:           device.ModelID,
+			DeviceType:        device.DeviceType,
+			DeviceOnline:      device.DeviceOnline,
+			BatteryPercentage: device.BatteryPercentage,
+			LastSeen:          device.LastSeenTimestamp,
+		})
 
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
 	err = json.NewEncoder(w).Encode(statusSuccess{
 		Status:  "ok",
-		Devices: devices,
+		Devices: newDevices,
 	})
 	if err != nil {
 		h.logger.Errorw("Failed to encode response", "error", err)
@@ -128,7 +142,7 @@ func (h *HTTPServerHandlers) HistoryEventsHandler(w http.ResponseWriter, r *http
 		h.responseWithError(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	
+
 	hours := r.URL.Query().Get("hours")
 	if hours == "" {
 		hours = "24"

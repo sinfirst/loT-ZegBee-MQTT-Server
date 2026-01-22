@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/storage"
 	"go.uber.org/zap"
@@ -16,7 +17,7 @@ type subscribeToDevices interface {
 }
 
 type notificator interface {
-	StartPooler(string, string)
+	StartPollingForDevice(string, string)
 }
 
 type HTTPServerHandlers struct {
@@ -71,4 +72,16 @@ func (h *HTTPServerHandlers) getIDFromURLPath(r *http.Request, prefix string) (s
 	}
 
 	return parts[0], nil
+}
+
+type DeviceForAnswer struct {
+	DeviceID          string    `json:"device_id"`
+	IEEEAddr          string    `json:"ieee_addr"`
+	UserID            string    `json:"user_id,omitempty"`
+	HubID             string    `json:"hub_id"`
+	ModelID           string    `json:"model_id"`
+	DeviceType        string    `json:"device_type"`
+	DeviceOnline      bool      `json:"device_online"`
+	BatteryPercentage int       `json:"battery_percentage"`
+	LastSeen          time.Time `json:"last_seen"`
 }
