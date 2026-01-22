@@ -50,9 +50,10 @@ type MQTTConfig struct {
 }
 
 type HTTPConfig struct {
-	Host    string `yaml:"host"`
-	Port    int    `yaml:"port"`
-	Address string
+	Host       string `yaml:"host"`
+	Port       int    `yaml:"port"`
+	BotAddress string `yaml:"bot_addr"`
+	Address    string
 }
 
 type DataBaseConfig struct {

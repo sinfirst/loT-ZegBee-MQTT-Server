@@ -46,7 +46,7 @@ func (c *ClientHandlers) PushEvent(event models.Event, userID string) error {
 	req, err := http.NewRequestWithContext(
 		context.Background(),
 		"POST",
-		"http://"+c.config.HTTP.Address+"/api/bot/notify",
+		"http://"+c.config.HTTP.BotAddress+"/api/bot/notify",
 		bytes.NewBuffer(jsonData),
 	)
 	if err != nil {

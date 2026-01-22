@@ -136,7 +136,7 @@ func (n *NotificationPooler) RestorePollers() {
 	n.logger.Infow("Notification pollers restored", "devices_count", len(deviceIDs))
 }
 func (n *NotificationPooler) checkEvent(deviceID string, userID string) {
-	events, err := n.storage.GetRecentEventsByDeviceID(context.Background(), deviceID, n.config.Notify.NotificationTiker+15)
+	events, err := n.storage.GetRecentEventsByDeviceID(context.Background(), deviceID, n.config.Notify.NotificationTiker)
 	if err != nil {
 		n.logger.Errorw("Failed to scan events in poller", "device_id", deviceID, "error", err)
 		return

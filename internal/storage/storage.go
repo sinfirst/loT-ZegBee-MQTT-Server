@@ -866,6 +866,5 @@ func (p *PGDB) GetDeviceUserPairs(ctx context.Context) ([]string, []string, erro
 		userIDs = append(userIDs, userID)
 	}
 
-	p.logger.Debugw("Found device-user pairs", "count", len(deviceIDs))
 	return deviceIDs, userIDs, nil
 }
