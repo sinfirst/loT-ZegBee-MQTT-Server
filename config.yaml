@@ -1,0 +1,41 @@
+# Конфигурация приложения
+app:
+  name: "mqtt-http-bridge"
+  version: "0.0.1"
+
+# Конфигурация пуллера логики отправки сообщений
+notify:
+  check_event_ticker: 15
+  min_event_for_notify: 2
+  max_variation: 20
+  drop_link_quality: 100
+
+# Настройки логгера
+log:
+  level: "debug" # debug, info, warn, error
+
+# Настройки MQTT клиента(ТЕСТОВЫЕ)
+mqtt:
+  broker: "192.168.1.5:1883"
+  client_id: "zigbee-server"
+  new_divice_topic: "tele/+/+/SENSOR"
+  qos: 0
+  clean_session: true
+  keep_alive: 60
+  connect_timeout: 30
+  zb_info_ticker: 60
+
+# Настройки http сервера (ТЕСТОВЫЕ)
+http:
+  host: "localhost"
+  port: 8080
+  bot_addr: "localhost:8081"
+
+# Настройки базы данных (ТЕСТОВЫЕ)
+database:
+  host: "localhost"
+  port: 5432
+  name: "lotdb"
+  user: "admin"
+  password: "admin"
+

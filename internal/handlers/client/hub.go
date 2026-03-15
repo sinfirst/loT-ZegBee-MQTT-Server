@@ -1,0 +1,79 @@
+package client
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/sinfirst/loT-ZegBee-MQTT-Server/internal/models"
+)
+
+func (c *ClientHandlers) ZbInfoHandler(hubID string, zbInfo map[string]models.ZbDeviceInfo) error {
+	if len(zbInfo) == 0 {
+		return c.ErrorHandler(hubID, "", "empty_zbinfo", "Received empty ZbInfo")
+	}
+
+	deviceIDs := make([]string, 0, len(zbInfo))
+	for deviceID := range zbInfo {
+		deviceIDs = append(deviceIDs, models.NormalizeDeviceID(deviceID))
+	}
+
+	err := c.storage.UpdateDevicesFromZbInfo(context.Background(), hubID, zbInfo)
+	if err != nil {
+		c.logger.Errorw("Failed to update devices from ZbInfo",
+			"hub_id", hubID,
+			"error", err,
+			"device_count", len(zbInfo),
+		)
+		return c.ErrorHandler(hubID, "", "zbinfo_update_error",
+			fmt.Sprintf("Failed to update %d devices: %v", len(zbInfo), err))
+	}
+
+	if len(deviceIDs) > 0 {
+		if err := c.storage.AutoAssignNewDevices(context.Background(), hubID, deviceIDs); err != nil {
+			c.logger.Warnw("Failed to auto-assign new devices",
+				"hub_id", hubID,
+				"error", err,
+			)
+		}
+	}
+
+	c.logger.Infow("Processed ZbInfo",
+		"hub_id", hubID,
+		"total_devices", len(zbInfo),
+	)
+
+	return nil
+}
+
+func (c *ClientHandlers) EventHandler(hubID string, eventData models.ZbDeviceEvent) error {
+	deviceID := models.NormalizeDeviceID(eventData.Device)
+
+	eventType := determineEventTypeLogic(eventData)
+
+	eventID, err := c.storage.StorageEvent(context.Background(), hubID, deviceID, eventData, eventType)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to save event to DB: %v", err)
+		c.logger.Errorw(errMsg,
+			"hub_id", hubID,
+			"device_id", deviceID,
+			"error", err,
+		)
+		return c.ErrorHandler(hubID, deviceID, "db_save_error", errMsg)
+	}
+
+	c.logger.Debugw("Event saved to DB",
+		"event_id", eventID,
+		"hub_id", hubID,
+		"device_id", deviceID,
+		"event_type", eventType,
+	)
+	return nil
+}
+
+func determineEventTypeLogic(event models.ZbDeviceEvent) string {
+	if event.Movement != 1 {
+		return "device_on"
+	}
+
+	return "movement_detection"
+}
